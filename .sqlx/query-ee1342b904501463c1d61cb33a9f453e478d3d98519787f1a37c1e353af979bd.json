@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO price_cache (symbol, date, close_price)\n        VALUES (?, ?, ?)\n        ON CONFLICT(symbol, date) DO UPDATE SET close_price = excluded.close_price\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "ee1342b904501463c1d61cb33a9f453e478d3d98519787f1a37c1e353af979bd"
+}

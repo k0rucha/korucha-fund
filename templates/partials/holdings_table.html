@@ -1,0 +1,105 @@
+<div class="da-card overflow-hidden">
+    <div class="px-6 py-5 border-b border-da-gray-200 bg-da-gray-50/50">
+        <h3 class="text-base font-bold text-da-gray-800 tracking-wide">銘柄一覧</h3>
+    </div>
+    <div class="overflow-x-auto">
+        <table id="holdings-sortable" class="min-w-full text-base">
+            <thead>
+                <tr class="border-b border-da-gray-200 bg-da-gray-50/30">
+                    <th class="px-6 py-4 text-left text-sm font-bold text-da-gray-600 uppercase tracking-wider">ティッカー</th>
+                    <th class="px-6 py-4 text-left text-sm font-bold text-da-gray-600 uppercase tracking-wider">銘柄名</th>
+                    <th class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="quantity">保有数<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
+                    <th class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="avg-cost">取得単価<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
+                    <th class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="cur-price">現在価格<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
+                    <th class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="value">評価額 (¥)<span class="sort-arrow ml-1 text-da-blue-900">▼</span></th>
+                    <th class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="pnl">損益 (¥)<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
+                    <th class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="pnl-pct">損益率<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-da-gray-200">
+                {% for h in holdings %}
+                <tr class="table-row-hover transition-colors">
+                    <td class="px-6 py-4 whitespace-nowrap font-bold text-da-blue-1200 text-base">{% if !h.name.is_empty() %}<span class="ticker-symbol-cell" data-ticker-name="{{ h.name }}">{{ h.symbol }}</span>{% else %}{{ h.symbol }}{% endif %}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-da-gray-700 text-sm">{% if h.name.is_empty() %}<span class="italic text-da-gray-400">—</span>{% else %}{{ h.name }}{% endif %}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-da-gray-700 font-medium" data-sort="{{ h.quantity_num }}">{{ h.quantity }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-da-gray-700" data-sort="{{ h.average_cost_native_num }}">{{ h.average_cost_native }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-da-gray-700" data-sort="{{ h.current_price_native_num }}">{{ h.current_price_native }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-da-gray-800 font-bold" data-sort="{{ h.current_value_jpy_num }}">¥{{ h.current_value_jpy }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right font-bold {% if h.unrealized_pnl_jpy_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}" data-sort="{{ h.unrealized_pnl_jpy_num }}">
+                        {% if h.unrealized_pnl_jpy_num >= 0.0 %}+{% else %}-{% endif %}¥{{ h.unrealized_pnl_jpy }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right font-bold {% if h.unrealized_pnl_pct_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}" data-sort="{{ h.unrealized_pnl_pct_num }}">
+                        {% if h.unrealized_pnl_pct_num >= 0.0 %}+{% endif %}{{ h.unrealized_pnl_pct }}%
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if holdings.is_empty() %}
+    <div class="px-6 py-16 text-center text-da-gray-400">
+        <p class="text-lg mb-3 font-medium">まだ銘柄がありません</p>
+        <p class="text-base"><a href="/admin" class="text-da-blue-900 hover:text-da-blue-600 underline font-bold">管理画面</a>から取引を追加してください</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+(function () {
+    const table = document.getElementById('holdings-sortable');
+    if (!table) return;
+    const headers = table.querySelectorAll('th.sortable');
+    const tbody = table.querySelector('tbody');
+
+    // Default state: value column descending (matches server-side default order).
+    let currentCol = 'value';
+    let currentDir = 'desc';
+
+    function colIndex(col) {
+        const ths = table.querySelectorAll('th');
+        for (let i = 0; i < ths.length; i++) {
+            if (ths[i].dataset.col === col) return i;
+        }
+        return -1;
+    }
+
+    function sortBy(col, dir) {
+        const idx = colIndex(col);
+        if (idx < 0) return;
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort((a, b) => {
+            const av = parseFloat(a.children[idx].dataset.sort);
+            const bv = parseFloat(b.children[idx].dataset.sort);
+            if (isNaN(av) || isNaN(bv)) return 0;
+            return dir === 'asc' ? av - bv : bv - av;
+        });
+        rows.forEach(r => tbody.appendChild(r));
+
+        headers.forEach(h => {
+            const arrow = h.querySelector('.sort-arrow');
+            if (h.dataset.col === col) {
+                arrow.textContent = dir === 'asc' ? '▲' : '▼';
+                arrow.classList.remove('text-da-gray-400');
+                arrow.classList.add('text-da-blue-900');
+            } else {
+                arrow.textContent = '';
+                arrow.classList.add('text-da-gray-400');
+                arrow.classList.remove('text-da-blue-900');
+            }
+        });
+    }
+
+    headers.forEach(h => {
+        h.addEventListener('click', () => {
+            const col = h.dataset.col;
+            if (currentCol === col) {
+                currentDir = currentDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentCol = col;
+                currentDir = 'desc';
+            }
+            sortBy(currentCol, currentDir);
+        });
+    });
+})();
+</script>

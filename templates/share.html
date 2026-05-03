@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block title %}{{ og_title }}{% endblock %}
+{% block description %}{{ og_description }}{% endblock %}
+
+{% block extra_head %}
+<meta property="og:type" content="website">
+<meta property="og:url" content="{{ og_url }}">
+<meta property="og:title" content="{{ og_title }}">
+<meta property="og:description" content="{{ og_description }}">
+<meta property="og:image" content="{{ og_image_url }}">
+<meta property="og:site_name" content="こるちゃファンド">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ og_title }}">
+<meta name="twitter:description" content="{{ og_description }}">
+<meta name="twitter:image" content="{{ og_image_url }}">
+{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="mb-8 flex items-center justify-between gap-4 flex-wrap">
+        <div>
+            <div class="text-xs font-bold text-da-gray-400 uppercase tracking-widest mb-1">SHARED CARD</div>
+            <h2 class="text-2xl font-black text-da-blue-1200 tracking-tight">こるちゃファンド 戦績カード</h2>
+            <p class="text-sm text-da-gray-600 mt-1">発行日時 {{ created_at }}</p>
+        </div>
+        <a href="/" class="text-da-blue-900 hover:text-da-blue-600 text-sm font-bold transition-colors">
+            ファンドの最新状況へ →
+        </a>
+    </div>
+
+    <!-- Card -->
+    <div class="da-card p-8 mb-8" id="shareCard">
+        <div class="flex items-center gap-4 mb-8">
+            <img src="/static/logo.webp" alt="" aria-hidden="true" class="w-10 h-10 object-contain">
+            <div class="text-xs text-da-gray-400">発行時点のスナップショット ・ {{ created_at }}</div>
+        </div>
+
+        <!-- Main: at-issue values -->
+        <div class="mb-10">
+            <div class="text-xs font-bold text-da-gray-600 uppercase tracking-widest mb-3">発行時点の総評価額</div>
+            <div class="text-5xl font-black text-da-blue-1200 leading-none mb-4 tabular-nums">¥{{ issue_value }}</div>
+            <div class="flex flex-wrap gap-x-8 gap-y-3 text-sm">
+                <div>
+                    <span class="text-da-gray-600">投資元本</span>
+                    <span class="font-bold text-da-gray-800 ml-2 tabular-nums">¥{{ issue_cost }}</span>
+                </div>
+                <div>
+                    <span class="text-da-gray-600">含み損益</span>
+                    <span class="font-bold ml-2 tabular-nums {% if issue_pnl_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}">{% if issue_pnl_num >= 0.0 %}+{% else %}-{% endif %}¥{{ issue_pnl }}</span>
+                </div>
+                <div>
+                    <span class="text-da-gray-600">損益率</span>
+                    <span class="font-bold ml-2 tabular-nums {% if issue_pnl_pct_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}">{{ issue_pnl_pct }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chart with span toggle -->
+        <div class="mb-10">
+            <div class="flex justify-between items-center mb-4 flex-wrap gap-3">
+                <div class="text-xs font-bold text-da-gray-600 uppercase tracking-widest">発行時までの推移</div>
+                <div class="inline-flex border border-da-gray-200 rounded overflow-hidden text-xs font-bold" id="spanToggle">
+                    <button data-span="all" class="span-btn px-4 py-2 transition-colors">全期間</button>
+                    <button data-span="30d" class="span-btn px-4 py-2 transition-colors border-l border-da-gray-200">30日</button>
+                    <button data-span="7d" class="span-btn px-4 py-2 transition-colors border-l border-da-gray-200">7日</button>
+                </div>
+            </div>
+            <div class="relative" style="height: 280px;">
+                <canvas id="shareChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Holdings list (at issue) -->
+        {% if !holdings.is_empty() %}
+        <div class="mb-10">
+            <div class="text-xs font-bold text-da-gray-600 uppercase tracking-widest mb-4">発行時の保有銘柄</div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-da-gray-200">
+                            <th class="px-3 py-2 text-left text-xs font-bold text-da-gray-400 uppercase tracking-wider">銘柄</th>
+                            <th class="px-3 py-2 text-right text-xs font-bold text-da-gray-400 uppercase tracking-wider">評価額 (¥)</th>
+                            <th class="px-3 py-2 text-right text-xs font-bold text-da-gray-400 uppercase tracking-wider">含み損益</th>
+                            <th class="px-3 py-2 text-right text-xs font-bold text-da-gray-400 uppercase tracking-wider">損益率</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-da-gray-200">
+                        {% for h in holdings %}
+                        <tr>
+                            <td class="px-3 py-3">
+                                <div class="font-bold text-da-blue-1200">{{ h.symbol }}</div>
+                                {% if !h.name.is_empty() %}<div class="text-xs text-da-gray-600">{{ h.name }}</div>{% endif %}
+                            </td>
+                            <td class="px-3 py-3 text-right text-da-gray-800 font-bold tabular-nums">¥{{ h.at_issue_value }}</td>
+                            <td class="px-3 py-3 text-right tabular-nums font-bold {% if h.at_issue_pnl_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}">{% if h.at_issue_pnl_num >= 0.0 %}+{% else %}-{% endif %}¥{{ h.at_issue_pnl }}</td>
+                            <td class="px-3 py-3 text-right tabular-nums font-bold {% if h.at_issue_pnl_pct_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}">{{ h.at_issue_pnl_pct }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Sub: since-issuance change (subordinate, single line) -->
+        <div class="border-t border-da-gray-200 pt-5">
+            <div class="text-[10px] font-bold text-da-gray-400 uppercase tracking-widest mb-2">この発行から</div>
+            {% if days_since == 0 %}
+            <p class="text-sm text-da-gray-600">本日発行 — 現在の評価額は <span class="font-bold text-da-gray-800 tabular-nums">¥{{ current_value }}</span></p>
+            {% else %}
+            <p class="text-sm text-da-gray-600">
+                {{ days_since }}日経過 — 現在 <span class="font-bold text-da-gray-800 tabular-nums">¥{{ current_value }}</span>
+                <span class="ml-2 font-bold tabular-nums {% if value_delta_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}">
+                    ({% if value_delta_num >= 0.0 %}+{% else %}-{% endif %}¥{{ value_delta }} / {{ value_delta_pct }})
+                </span>
+            </p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="text-center">
+        <button id="copyShareUrlBtn" class="text-da-blue-900 hover:text-da-blue-600 text-sm font-bold transition-colors">
+            このページのURLをコピー
+        </button>
+        <span id="copyShareUrlMsg" class="text-emerald-600 text-sm font-bold ml-3 hidden">コピーしました</span>
+    </div>
+</div>
+
+<style>
+    .span-btn { color: #666666; background: #FFFFFF; }
+    .span-btn:hover { background: #F0F6FF; color: #004BB1; }
+    .span-btn.active { background: #000060; color: #FFFFFF; }
+</style>
+
+<script>
+(function () {
+    const dates = {{ history_dates_json|safe }};
+    const values = {{ history_values_json|safe }};
+    const pnls = {{ history_pnls_json|safe }};
+    const defaultSpan = '{{ default_span }}';
+
+    const ctx = document.getElementById('shareChart').getContext('2d');
+    let chart = null;
+
+    function sliceForSpan(span) {
+        if (!dates.length) return { d: [], v: [], p: [] };
+        if (span === 'all') return { d: dates, v: values, p: pnls };
+
+        // Span endpoint = last data point (= issuance moment).
+        const lastDate = new Date(dates[dates.length - 1]);
+        const days = span === '7d' ? 7 : 30;
+        const cutoff = new Date(lastDate.getTime() - days * 86400000);
+
+        const d = [], v = [], p = [];
+        for (let i = 0; i < dates.length; i++) {
+            if (new Date(dates[i]) >= cutoff) {
+                d.push(dates[i]); v.push(values[i]); p.push(pnls[i]);
+            }
+        }
+        return { d, v, p };
+    }
+
+    function render(span) {
+        const sliced = sliceForSpan(span);
+        if (chart) chart.destroy();
+
+        if (sliced.d.length === 0) {
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            ctx.font = '13px Inter';
+            ctx.fillStyle = '#999999';
+            ctx.textAlign = 'center';
+            ctx.fillText('この期間のスナップショットがありません', ctx.canvas.width / 2, ctx.canvas.height / 2);
+            return;
+        }
+
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: sliced.d,
+                datasets: [
+                    {
+                        label: '評価額',
+                        data: sliced.v,
+                        borderColor: '#000060',
+                        backgroundColor: 'rgba(0, 0, 96, 0.05)',
+                        fill: true,
+                        tension: 0.2,
+                        pointRadius: 0,
+                        borderWidth: 3,
+                    },
+                    {
+                        label: '損益',
+                        data: sliced.p,
+                        borderColor: '#FB5801',
+                        fill: false,
+                        tension: 0.2,
+                        pointRadius: 0,
+                        borderWidth: 2,
+                        yAxisID: 'y1',
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { intersect: false, mode: 'index' },
+                scales: {
+                    x: {
+                        ticks: { color: '#666666', font: { size: 11, family: 'Inter' } },
+                        grid: { display: false },
+                    },
+                    y: {
+                        position: 'left',
+                        ticks: {
+                            color: '#666666',
+                            font: { size: 11, family: 'Inter' },
+                            callback: v => '¥' + v.toLocaleString(),
+                        },
+                        grid: { color: '#F0F0F0' },
+                    },
+                    y1: {
+                        position: 'right',
+                        ticks: {
+                            color: '#FB5801',
+                            font: { size: 11, family: 'Inter' },
+                            callback: v => '¥' + v.toLocaleString(),
+                        },
+                        grid: { drawOnChartArea: false },
+                    },
+                },
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: '#333333',
+                            font: { size: 12, family: 'Inter', weight: '500' },
+                            usePointStyle: true,
+                        },
+                    },
+                    tooltip: {
+                        backgroundColor: '#FFFFFF',
+                        titleColor: '#333333',
+                        bodyColor: '#666666',
+                        borderColor: '#E2E8F0',
+                        borderWidth: 1,
+                        padding: 10,
+                        callbacks: {
+                            label: function(context) {
+                                return ` ${context.dataset.label}: ¥${context.raw.toLocaleString()}`;
+                            },
+                        },
+                    },
+                },
+            },
+        });
+    }
+
+    const spanBtns = document.querySelectorAll('#spanToggle .span-btn');
+    function setActive(span) {
+        spanBtns.forEach(b => {
+            if (b.dataset.span === span) b.classList.add('active');
+            else b.classList.remove('active');
+        });
+    }
+    spanBtns.forEach(b => {
+        b.addEventListener('click', () => {
+            const span = b.dataset.span;
+            setActive(span);
+            render(span);
+        });
+    });
+
+    setActive(defaultSpan);
+    render(defaultSpan);
+
+    // URL copy
+    const copyBtn = document.getElementById('copyShareUrlBtn');
+    const copyMsg = document.getElementById('copyShareUrlMsg');
+    copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(location.href).then(() => {
+            copyMsg.classList.remove('hidden');
+            setTimeout(() => copyMsg.classList.add('hidden'), 2000);
+        });
+    });
+})();
+</script>
+{% endblock %}

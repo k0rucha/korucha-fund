@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO transactions (symbol, txn_type, quantity, price, currency, fee, txn_date, fx_rate_to_jpy, notes)\n        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "46ed158cec5a5da2e6ba86cd2d2dc262e6ed9e8a217ec940050fe9a6a97b937b"
+}

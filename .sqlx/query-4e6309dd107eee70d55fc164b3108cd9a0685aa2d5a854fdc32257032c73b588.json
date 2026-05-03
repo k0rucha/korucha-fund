@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO fx_cache (pair, date, rate)\n        VALUES ('USDJPY', ?, ?)\n        ON CONFLICT(pair, date) DO UPDATE SET rate = excluded.rate\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "4e6309dd107eee70d55fc164b3108cd9a0685aa2d5a854fdc32257032c73b588"
+}

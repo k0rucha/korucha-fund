@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+
+{% block title %}こるちゃファンド ダッシュボード{% endblock %}
+{% block description %}こるちゃ（Mahiro Takeshita）の個人株式ポートフォリオを可視化するダッシュボード。総評価額・損益・銘柄構成比・時系列推移を一覧できます。{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <!-- KPI Tiles -->
+    <div id="kpi-tiles" class="mb-10">
+        {% include "partials/kpi_tiles.html" %}
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
+        <div class="da-card p-6 lg:col-span-1">
+            <h3 class="text-base font-bold text-da-gray-800 tracking-wide mb-6">構成比</h3>
+            <div class="relative mx-auto" style="height: 240px; max-width: 280px;">
+                <canvas id="compositionChart"></canvas>
+            </div>
+            <ul id="compositionLegend" class="mt-6 space-y-2 text-sm"></ul>
+            <button id="compositionLegendToggle" type="button"
+                class="hidden mt-3 text-xs font-medium text-da-blue-900 hover:text-da-blue-600 transition-colors">
+                もっと見る
+            </button>
+        </div>
+        <div class="da-card p-6 lg:col-span-2">
+            <h3 class="text-base font-bold text-da-gray-800 tracking-wide mb-6">評価額の推移</h3>
+            <div class="relative" style="height: 340px;">
+                <canvas id="timeseriesChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Holdings Table -->
+    <div id="holdings-table">
+        {% include "partials/holdings_table.html" %}
+    </div>
+</div>
+
+<script>
+    // 日付をJST形式でフォーマットする関数
+    function formatDateJST(dateStr) {
+        const date = new Date(dateStr + 'T00:00:00Z');
+        return new Intl.DateTimeFormat('ja-JP', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }).format(date).replace(/\//g, '/');
+    }
+
+    // Digital Agency inspired palette (Blues + Accents)
+    const chartColors = [
+        '#000060', '#004BB1', '#3E86E8', '#FB5801', '#FFBD44',
+        '#0017C1', '#0061D3', '#A5C9FF', '#FFC700', '#666666',
+    ];
+
+    // --- Composition Doughnut Chart ---
+    fetch('/fragment/composition')
+        .then(r => r.json())
+        .then(data => {
+            const ctx = document.getElementById('compositionChart').getContext('2d');
+            const legendEl = document.getElementById('compositionLegend');
+            const toggleBtn = document.getElementById('compositionLegendToggle');
+            const total = data.values.reduce((a, b) => a + b, 0);
+            const COLLAPSED_COUNT = 5;
+            legendEl.innerHTML = data.labels.map((label, i) => {
+                const color = chartColors[i % chartColors.length];
+                const pct = total > 0 ? ((data.values[i] / total) * 100).toFixed(1) : '0.0';
+                const fullName = (data.full_names && data.full_names[i]) ? data.full_names[i] : label;
+                const hidden = i >= COLLAPSED_COUNT ? 'data-extra="1" style="display:none;"' : '';
+                return `
+                    <li class="flex items-center gap-3" title="${fullName}" ${hidden}>
+                        <span class="inline-block w-3 h-3 rounded-sm flex-shrink-0" style="background-color: ${color};"></span>
+                        <span class="flex-1 truncate text-da-gray-800">${label}</span>
+                        <span class="text-da-gray-600 tabular-nums">${pct}%</span>
+                    </li>
+                `;
+            }).join('');
+            if (data.labels.length > COLLAPSED_COUNT) {
+                const hiddenCount = data.labels.length - COLLAPSED_COUNT;
+                toggleBtn.classList.remove('hidden');
+                toggleBtn.textContent = `もっと見る (+${hiddenCount})`;
+                let expanded = false;
+                toggleBtn.addEventListener('click', () => {
+                    expanded = !expanded;
+                    legendEl.querySelectorAll('li[data-extra]').forEach(li => {
+                        li.style.display = expanded ? '' : 'none';
+                    });
+                    toggleBtn.textContent = expanded ? '折りたたむ' : `もっと見る (+${hiddenCount})`;
+                });
+            }
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        data: data.values,
+                        backgroundColor: chartColors.slice(0, data.labels.length),
+                        borderColor: '#FFFFFF',
+                        borderWidth: 2,
+                        hoverOffset: 12,
+                    }],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#FFFFFF',
+                            titleColor: '#333333',
+                            bodyColor: '#666666',
+                            borderColor: '#E2E8F0',
+                            borderWidth: 1,
+                            padding: 12,
+                            displayColors: true,
+                            boxPadding: 6,
+                            callbacks: {
+                                title: function(items) {
+                                    if (!items.length) return '';
+                                    const i = items[0].dataIndex;
+                                    return data.full_names[i] || items[0].label;
+                                },
+                                label: function(context) {
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const pct = ((context.raw / total) * 100).toFixed(1);
+                                    return ` ¥${context.raw.toLocaleString()} (${pct}%)`;
+                                },
+                            },
+                        },
+                    },
+                },
+            });
+        });
+
+    // --- Timeseries Line Chart ---
+    fetch('/fragment/timeseries')
+        .then(r => r.json())
+        .then(data => {
+            const ctx = document.getElementById('timeseriesChart').getContext('2d');
+            if (data.dates.length === 0) {
+                ctx.font = '14px Inter';
+                ctx.fillStyle = '#999999';
+                ctx.textAlign = 'center';
+                ctx.fillText('データがまだありません', ctx.canvas.width / 2, ctx.canvas.height / 2);
+                return;
+            }
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.dates.map(d => formatDateJST(d)),
+                    datasets: [
+                        {
+                            label: '評価額',
+                            data: data.values,
+                            borderColor: '#000060',
+                            backgroundColor: 'rgba(0, 0, 96, 0.05)',
+                            fill: true,
+                            tension: 0.2,
+                            pointRadius: 0,
+                            pointHoverRadius: 6,
+                            pointHoverBackgroundColor: '#000060',
+                            pointHoverBorderColor: '#FFFFFF',
+                            pointHoverBorderWidth: 2,
+                            borderWidth: 3,
+                        },
+                        {
+                            label: '投資元本',
+                            data: data.costs,
+                            borderColor: '#999999',
+                            borderDash: [5, 5],
+                            fill: false,
+                            tension: 0.1,
+                            pointRadius: 0,
+                            borderWidth: 2,
+                        },
+                        {
+                            label: '損益',
+                            data: data.pnls,
+                            borderColor: '#FB5801',
+                            backgroundColor: 'rgba(251, 88, 1, 0.05)',
+                            fill: false,
+                            tension: 0.2,
+                            pointRadius: 0,
+                            pointHoverRadius: 6,
+                            pointHoverBackgroundColor: '#FB5801',
+                            pointHoverBorderColor: '#FFFFFF',
+                            pointHoverBorderWidth: 2,
+                            borderWidth: 2,
+                            yAxisID: 'y1',
+                        },
+                    ],
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { intersect: false, mode: 'index' },
+                    scales: {
+                        x: {
+                            ticks: { color: '#666666', font: { size: 12, family: 'Inter' } },
+                            grid: { display: false },
+                        },
+                        y: {
+                            position: 'left',
+                            ticks: {
+                                color: '#666666',
+                                font: { size: 12, family: 'Inter' },
+                                callback: v => '¥' + v.toLocaleString(),
+                            },
+                            grid: { color: '#F0F0F0' },
+                        },
+                        y1: {
+                            position: 'right',
+                            ticks: {
+                                color: '#FB5801',
+                                font: { size: 12, family: 'Inter' },
+                                callback: v => '¥' + v.toLocaleString(),
+                            },
+                            grid: { drawOnChartArea: false },
+                        },
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#333333',
+                                font: { size: 13, family: 'Inter', weight: '500' },
+                                usePointStyle: true,
+                            },
+                        },
+                        tooltip: {
+                            backgroundColor: '#FFFFFF',
+                            titleColor: '#333333',
+                            bodyColor: '#666666',
+                            borderColor: '#E2E8F0',
+                            borderWidth: 1,
+                            padding: 12,
+                            boxPadding: 6,
+                            callbacks: {
+                                label: function(context) {
+                                    return ` ${context.dataset.label}: ¥${context.raw.toLocaleString()}`;
+                                },
+                            },
+                        },
+                    },
+                },
+            });
+        });
+</script>
+{% endblock %}

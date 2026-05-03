@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        INSERT INTO symbols (symbol, currency, updated_at)\n        VALUES (?, ?, CURRENT_TIMESTAMP)\n        ON CONFLICT(symbol) DO UPDATE SET updated_at = CURRENT_TIMESTAMP\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "9cd0c4e9c12700de223bfaa487f9475a099b40e1ddf7b5bd994020d906cbbbd3"
+}

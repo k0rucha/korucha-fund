@@ -1,0 +1,40 @@
+# Rust build output
+/target
+**/target/
+
+# Environment / secrets
+/.env
+.env.local
+
+# SQLite databases
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Downloaded tools / binaries
+/protoc/
+/protoc.zip
+*.zip
+
+# Temporary / scratch
+/scratch_bin/
+check_errors.txt
+
+# Claude Code local settings
+.claude/
+CLAUDE.md
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# Personal Notes, docs
+/docs

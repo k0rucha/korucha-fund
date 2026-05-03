@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+
+{% block title %}サーバーステータス — こるちゃファンド{% endblock %}
+{% block description %}こるちゃファンドのサーバーステータス。外部APIのレートリミット状況とスケジューラーの実行予定をリアルタイム表示します。{% endblock %}
+
+{% block content %}
+<div class="fade-in">
+    <div class="mb-8">
+        <div class="text-xs font-bold text-da-gray-400 uppercase tracking-widest mb-1">SERVER STATUS</div>
+        <h2 class="text-2xl font-black text-da-blue-1200 tracking-tight">サーバーステータス</h2>
+        <p class="text-sm text-da-gray-600 mt-1">外部API（Yahoo Finance）のレートリミット状況をリアルタイムで表示します</p>
+    </div>
+
+    <div id="statusContainer">
+        <!-- Loading placeholder -->
+        <div class="da-card p-12 text-center">
+            <div class="inline-block w-8 h-8 border-4 border-da-gray-200 border-t-da-blue-1200 rounded-full status-spin"></div>
+            <p class="text-da-gray-600 mt-4 text-sm">ステータスを読み込み中…</p>
+        </div>
+    </div>
+</div>
+
+<style>
+    .status-spin { animation: spin 1s linear infinite; }
+    .status-progress {
+        height: 8px;
+        background-color: #E2E8F0;
+        border-radius: 999px;
+        overflow: hidden;
+    }
+    .status-progress-fill {
+        height: 100%;
+        border-radius: 999px;
+        transition: width 0.4s ease;
+    }
+    .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 14px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 700;
+        border: 1px solid;
+    }
+    .status-pill::before {
+        content: '';
+        width: 8px; height: 8px; border-radius: 999px;
+        background: currentColor;
+    }
+    .status-pill.available { background: #ECFDF5; color: #059669; border-color: #A7F3D0; }
+    .status-pill.waiting   { background: #FFFBEB; color: #B45309; border-color: #FCD34D; }
+    .status-pill.unavailable { background: #FEF2F2; color: #B91C1C; border-color: #FCA5A5; }
+    .status-info-table { width: 100%; border-collapse: collapse; }
+    .status-info-table td {
+        padding: 14px 0;
+        border-bottom: 1px solid #E2E8F0;
+        font-size: 14px;
+    }
+    .status-info-table tr:last-child td { border-bottom: none; }
+    .status-info-table td:first-child {
+        color: #666666;
+        font-weight: 500;
+        width: 45%;
+    }
+    .status-info-table td:last-child {
+        color: #333333;
+        text-align: right;
+        font-weight: 700;
+        font-variant-numeric: tabular-nums;
+    }
+</style>
+
+<script>
+async function loadStatus() {
+    const container = document.getElementById('statusContainer');
+    try {
+        const response = await fetch('/api/status');
+        if (!response.ok) throw new Error('Failed to fetch status');
+
+        const data = await response.json();
+        const stats = data.api_stats;
+        const sched = data.scheduler;
+
+        const usagePct = (stats.request_count / stats.max_requests) * 100;
+
+        // Status pill
+        let pillClass = 'available';
+        if (!stats.can_request && stats.minutes_until_next > 0) pillClass = 'waiting';
+        else if (!stats.can_request && stats.remaining_requests === 0) pillClass = 'unavailable';
+
+        // Tile colour for "残り回数": green when plenty, amber when low, red when 0
+        let remainingTone = 'kpi-green';
+        if (stats.remaining_requests === 0) remainingTone = 'kpi-red';
+        else if (stats.remaining_requests <= 3) remainingTone = 'kpi-orange';
+
+        // Format today (data.today is a JST YYYY-MM-DD; parse as JST so the
+        // browser's timezone doesn't bump it forward/backward by a day).
+        const today = new Date(data.today + 'T00:00:00+09:00');
+        const todayStr = `${today.getFullYear()}年${String(today.getMonth() + 1).padStart(2, '0')}月${String(today.getDate()).padStart(2, '0')}日`;
+
+        // Format minutes-until as either "X分" or "Yh Zm"
+        function fmtMinutes(m) {
+            if (m == null) return '—';
+            if (m <= 0) return '即座';
+            if (m < 60) return `${m}分`;
+            const h = Math.floor(m / 60);
+            const rem = m % 60;
+            return rem === 0 ? `${h}時間` : `${h}時間${rem}分`;
+        }
+
+        const html = `
+            <!-- KPI tiles row -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="da-card p-7 kpi-blue">
+                    <div class="text-sm font-bold text-da-gray-600 uppercase tracking-wider mb-4">本日のAPI呼び出し</div>
+                    <div class="text-4xl font-black text-da-blue-1200 leading-none tabular-nums">
+                        ${stats.request_count}<span class="text-xl text-da-gray-400 font-bold ml-1">/${stats.max_requests}</span>
+                    </div>
+                </div>
+                <div class="da-card p-7 ${remainingTone}">
+                    <div class="text-sm font-bold text-da-gray-600 uppercase tracking-wider mb-4">残りリクエスト</div>
+                    <div class="text-4xl font-black leading-none tabular-nums ${stats.remaining_requests === 0 ? 'text-red-600' : (stats.remaining_requests <= 3 ? 'text-da-orange-600' : 'text-emerald-600')}">
+                        ${stats.remaining_requests}<span class="text-xl text-da-gray-400 font-bold ml-1">回</span>
+                    </div>
+                </div>
+                <div class="da-card p-7 kpi-orange">
+                    <div class="text-sm font-bold text-da-gray-600 uppercase tracking-wider mb-4">次回API更新可能</div>
+                    <div class="text-4xl font-black text-da-gray-800 leading-none tabular-nums">${fmtMinutes(stats.can_request ? 0 : stats.minutes_until_next)}</div>
+                </div>
+                <div class="da-card p-7 kpi-orange">
+                    <div class="text-sm font-bold text-da-gray-600 uppercase tracking-wider mb-4">次回スケジュール</div>
+                    <div class="text-4xl font-black text-da-gray-800 leading-none tabular-nums">${fmtMinutes(sched.minutes_until_next_execution)}</div>
+                </div>
+            </div>
+
+            <!-- Current state + usage progress -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                <div class="da-card p-6 lg:col-span-1">
+                    <h3 class="text-sm font-bold text-da-gray-600 uppercase tracking-wider mb-4">現在の状態</h3>
+                    <div class="mb-4">
+                        <span class="status-pill ${pillClass}">${stats.status_message}</span>
+                    </div>
+                    <p class="text-xs text-da-gray-600 leading-relaxed">
+                        外部APIへのアクセスが可能かどうかを示します。最小96分間隔・1日15回までが上限です。
+                    </p>
+                </div>
+
+                <div class="da-card p-6 lg:col-span-2">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-sm font-bold text-da-gray-600 uppercase tracking-wider">1日のAPI使用状況</h3>
+                        <span class="text-sm font-black text-da-blue-1200 tabular-nums">${usagePct.toFixed(1)}%</span>
+                    </div>
+                    <div class="status-progress mb-4">
+                        <div class="status-progress-fill" style="width: ${usagePct}%; background-color: ${usagePct >= 90 ? '#ef4444' : (usagePct >= 60 ? '#FB5801' : '#000060')};"></div>
+                    </div>
+                    <p class="text-xs text-da-gray-600">
+                        1日の上限 ${stats.max_requests} 回のうち <strong class="text-da-gray-800">${stats.request_count}</strong> 回を使用しました。
+                    </p>
+                </div>
+            </div>
+
+            <!-- Scheduler card -->
+            <div class="da-card p-6 mb-8">
+                <h3 class="text-sm font-bold text-da-gray-600 uppercase tracking-wider mb-5">スケジューラー（自動更新）</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <div class="text-xs font-bold text-da-gray-400 uppercase tracking-widest mb-2">次回実行予定</div>
+                        <div class="text-2xl font-black text-da-orange-600 leading-none tabular-nums">${sched.next_execution_time}</div>
+                        <div class="text-xs text-da-gray-400 font-mono mt-2">cron: ${sched.cron_expression}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs font-bold text-da-gray-400 uppercase tracking-widest mb-2">残り時間</div>
+                        <div class="text-2xl font-black text-da-blue-1200 leading-none tabular-nums">${fmtMinutes(sched.minutes_until_next_execution)}</div>
+                        <div class="status-progress mt-3">
+                            <div class="status-progress-fill" style="width: ${Math.max(0, Math.min(100, (1 - (sched.minutes_until_next_execution % 1440) / 1440) * 100))}%; background-color: #FB5801;"></div>
+                        </div>
+                    </div>
+                </div>
+                <p class="text-xs text-da-gray-600 mt-5 leading-relaxed">
+                    バックフィル処理と全スナップショット再生成を自動実行します。手動更新と同様に外部APIカウントへ加算されます。
+                </p>
+            </div>
+
+            <!-- Detail table -->
+            <div class="da-card overflow-hidden mb-8">
+                <div class="px-6 py-5 border-b border-da-gray-200 bg-da-gray-50/50">
+                    <h3 class="text-base font-bold text-da-gray-800 tracking-wide">詳細情報</h3>
+                </div>
+                <div class="px-6 pb-2">
+                    <table class="status-info-table">
+                        <tr>
+                            <td>本日の日付（JST）</td>
+                            <td>${todayStr}</td>
+                        </tr>
+                        <tr>
+                            <td>最後のAPI呼び出し</td>
+                            <td>${stats.last_request_time}</td>
+                        </tr>
+                        <tr>
+                            <td>次回API更新可能</td>
+                            <td>${stats.can_request ? '即座に可能' : (stats.minutes_until_next > 0 ? `${stats.minutes_until_next}分後` : '本日の上限到達')}</td>
+                        </tr>
+                        <tr>
+                            <td>API状態</td>
+                            <td class="${stats.can_request ? 'text-emerald-600' : 'text-red-600'}">${stats.can_request ? '✓ 利用可能' : '✕ 制限中'}</td>
+                        </tr>
+                        <tr>
+                            <td>最小リクエスト間隔</td>
+                            <td>96分</td>
+                        </tr>
+                        <tr>
+                            <td>次回スケジュール実行</td>
+                            <td class="text-da-orange-600">${fmtMinutes(sched.minutes_until_next_execution)}後</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Info card -->
+            <div class="da-card p-7 kpi-blue">
+                <h3 class="text-sm font-bold text-da-gray-600 uppercase tracking-wider mb-5">更新メカニズム</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
+                    <div>
+                        <div class="text-xs font-bold text-da-blue-900 uppercase tracking-widest mb-2">手動更新</div>
+                        <ul class="text-da-gray-700 space-y-1.5 list-disc list-inside text-xs leading-relaxed">
+                            <li>Stage 1: キャッシュからスナップショット生成（常に実行）</li>
+                            <li>Stage 2: レート制限OK時に外部API更新</li>
+                            <li>クリックは何度でも可能</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <div class="text-xs font-bold text-da-orange-600 uppercase tracking-widest mb-2">自動更新</div>
+                        <ul class="text-da-gray-700 space-y-1.5 list-disc list-inside text-xs leading-relaxed">
+                            <li>${sched.cron_expression === '0 0 23 * * *' ? '毎日 23:00 JST' : `cron: ${sched.cron_expression}`}に実行</li>
+                            <li>過去価格のバックフィル取得</li>
+                            <li>全期間のスナップショット再生成</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <div class="text-xs font-bold text-da-gray-800 uppercase tracking-widest mb-2">レート制限</div>
+                        <ul class="text-da-gray-700 space-y-1.5 list-disc list-inside text-xs leading-relaxed">
+                            <li>1日最大 15 回</li>
+                            <li>最小 96 分間隔</li>
+                            <li>手動 + 自動の両方でカウント</li>
+                            <li>毎日 00:00 JST にリセット</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        container.innerHTML = html;
+    } catch (error) {
+        console.error('Failed to load status:', error);
+        container.innerHTML = `
+            <div class="da-card p-12 text-center">
+                <p class="text-da-gray-600 text-sm mb-4">ステータスの読み込みに失敗しました</p>
+                <button onclick="location.reload()"
+                    class="text-da-blue-900 hover:text-da-blue-600 text-sm font-bold transition-colors">
+                    再試行
+                </button>
+            </div>
+        `;
+    }
+}
+
+loadStatus();
+setInterval(loadStatus, 30000);
+</script>
+{% endblock %}
