@@ -1,6 +1,5 @@
 mod auth;
 mod config;
-#[allow(dead_code)]
 mod error;
 pub mod db;
 pub mod handlers;
@@ -250,9 +249,9 @@ async fn error_handler(req: Request<axum::body::Body>, next: Next) -> axum::resp
     let response = next.run(req).await;
     let status = response.status();
 
-    if status == StatusCode::NOT_FOUND {
-        crate::error::AppError::NotFound.into_response()
-    } else if status == StatusCode::METHOD_NOT_ALLOWED {
+    // 404 is already rendered by handler_404 / AppError::NotFound::into_response().
+    // Only intercept 405 here, which has no dedicated fallback handler.
+    if status == StatusCode::METHOD_NOT_ALLOWED {
         crate::error::AppError::MethodNotAllowed.into_response()
     } else {
         response

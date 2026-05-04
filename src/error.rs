@@ -50,7 +50,10 @@ impl IntoResponse for AppError {
                 let template = NotFoundTemplate {};
                 match template.render() {
                     Ok(html) => (status, Html(html)).into_response(),
-                    Err(_) => (status, "Not Found").into_response(),
+                    Err(e) => {
+                        tracing::error!(error = ?e, "failed to render 404 template");
+                        (status, "Not Found").into_response()
+                    }
                 }
             }
             StatusCode::UNAUTHORIZED => (status, "Unauthorized").into_response(),
@@ -61,7 +64,10 @@ impl IntoResponse for AppError {
                 let template = ErrorTemplate {};
                 match template.render() {
                     Ok(html) => (status, Html(html)).into_response(),
-                    Err(_) => (status, "Internal Server Error").into_response(),
+                    Err(e) => {
+                        tracing::error!(error = ?e, "failed to render error template");
+                        (status, "Internal Server Error").into_response()
+                    }
                 }
             }
         }
