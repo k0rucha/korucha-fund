@@ -1,15 +1,16 @@
-use chrono::{NaiveDate, FixedOffset};
+use chrono::NaiveDate;
 use sqlx::SqlitePool;
 use yahoo_finance_api as yahoo;
 use yahoo::time::OffsetDateTime;
+use anyhow::Context;
 
 use crate::db::{symbols, prices, fx, api_stats};
+use crate::util::jst;
 
-/// Convert a Yahoo Finance Unix timestamp to a JST date.
+/// Convert a Yahoo Finance Unix timestamp (epoch seconds) to a JST date.
 /// Spec §11: all dates are JST.
 fn timestamp_to_jst_date(ts: i64) -> Option<NaiveDate> {
-    let jst = FixedOffset::east_opt(9 * 3600)?;
-    chrono::DateTime::from_timestamp(ts, 0).map(|dt| dt.with_timezone(&jst).date_naive())
+    chrono::DateTime::from_timestamp(ts, 0).map(|dt| dt.with_timezone(&jst()).date_naive())
 }
 
 pub async fn get_latest_close_price(symbol: &str) -> Result<(f64, NaiveDate), anyhow::Error> {
@@ -18,7 +19,7 @@ pub async fn get_latest_close_price(symbol: &str) -> Result<(f64, NaiveDate), an
     let quote = response.last_quote()?;
 
     let date = timestamp_to_jst_date(quote.timestamp as i64)
-        .ok_or_else(|| anyhow::anyhow!("invalid timestamp"))?;
+        .ok_or_else(|| anyhow::anyhow!("invalid timestamp: {}", quote.timestamp))?;
 
     Ok((quote.close, date))
 }
@@ -83,16 +84,25 @@ pub async fn update_price_cache(pool: &SqlitePool, symbol: &str) -> Result<(), a
     .await?;
 
     // Fetch and store company name if not already set
-    let existing = symbols::get_symbol_names(pool).await.unwrap_or_default();
-    let needs_name = existing.iter()
-        .find(|s| s.symbol == symbol)
-        .map(|s| s.name.is_none())
-        .unwrap_or(true);
+    let needs_name = match symbols::get_symbol_name(pool, symbol).await {
+        Ok(name) => name.is_none(),
+        Err(e) => {
+            tracing::warn!("Failed to check symbol name for {}: {}", symbol, e);
+            true
+        }
+    };
 
     if needs_name {
-        if let Ok(Some(name)) = fetch_symbol_name(symbol).await {
-            let _ = symbols::update_symbol_name(pool, symbol, &name, None).await;
-            tracing::info!("Updated symbol name: {} -> {}", symbol, name);
+        match fetch_symbol_name(symbol).await {
+            Ok(Some(name)) => {
+                if let Err(e) = symbols::update_symbol_name(pool, symbol, &name, None).await {
+                    tracing::warn!("Failed to store symbol name for {}: {}", symbol, e);
+                } else {
+                    tracing::info!("Updated symbol name: {} -> {}", symbol, name);
+                }
+            }
+            Ok(None) => {}
+            Err(e) => tracing::warn!("Failed to fetch symbol name for {}: {}", symbol, e),
         }
     }
 
@@ -100,7 +110,7 @@ pub async fn update_price_cache(pool: &SqlitePool, symbol: &str) -> Result<(), a
 }
 
 fn naive_date_to_odt(date: NaiveDate) -> OffsetDateTime {
-    let ts = date.and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp();
+    let ts = date.and_hms_opt(0, 0, 0).expect("valid midnight").and_utc().timestamp();
     OffsetDateTime::from_unix_timestamp(ts).unwrap_or(OffsetDateTime::UNIX_EPOCH)
 }
 
@@ -114,12 +124,18 @@ pub async fn backfill_price_history(
     let provider = yahoo::YahooConnector::new()?;
     let start_odt = naive_date_to_odt(start);
     let end_odt = OffsetDateTime::now_utc();
-    let response = provider.get_quote_history(symbol, start_odt, end_odt).await?;
+    let response = provider
+        .get_quote_history(symbol, start_odt, end_odt)
+        .await
+        .with_context(|| format!("get_quote_history failed for {} from {}", symbol, start))?;
     let quotes = response.quotes()?;
 
     let rows: Vec<(NaiveDate, f64)> = quotes
         .into_iter()
         .filter_map(|q| {
+            if !q.close.is_finite() || q.close == 0.0 {
+                return None;
+            }
             timestamp_to_jst_date(q.timestamp).map(|d| (d, q.close))
         })
         .collect();
@@ -136,12 +152,18 @@ pub async fn backfill_fx_history(
     let provider = yahoo::YahooConnector::new()?;
     let start_odt = naive_date_to_odt(start);
     let end_odt = OffsetDateTime::now_utc();
-    let response = provider.get_quote_history("USDJPY=X", start_odt, end_odt).await?;
+    let response = provider
+        .get_quote_history("USDJPY=X", start_odt, end_odt)
+        .await
+        .with_context(|| format!("get_quote_history failed for USDJPY=X from {}", start))?;
     let quotes = response.quotes()?;
 
     let rows: Vec<(NaiveDate, f64)> = quotes
         .into_iter()
         .filter_map(|q| {
+            if !q.close.is_finite() || q.close == 0.0 {
+                return None;
+            }
             timestamp_to_jst_date(q.timestamp).map(|d| (d, q.close))
         })
         .collect();

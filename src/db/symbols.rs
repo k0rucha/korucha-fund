@@ -16,6 +16,16 @@ pub async fn get_symbol_names(pool: &SqlitePool) -> Result<Vec<Symbol>, sqlx::Er
     .await
 }
 
+pub async fn get_symbol_name(pool: &SqlitePool, symbol: &str) -> Result<Option<String>, sqlx::Error> {
+    let row: Option<(Option<String>,)> = sqlx::query_as(
+        "SELECT name FROM symbols WHERE symbol = ?"
+    )
+    .bind(symbol)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.and_then(|r| r.0))
+}
+
 pub async fn update_symbol_name(pool: &SqlitePool, symbol: &str, name: &str, exchange: Option<&str>) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
