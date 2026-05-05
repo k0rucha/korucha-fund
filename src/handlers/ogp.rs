@@ -171,51 +171,51 @@ fn portfolio_svg(
       <stop offset="100%" stop-color="#000060" stop-opacity="1.0"/>
     </linearGradient>
   </defs>
-  <rect x="0" y="0"   width="1200" height="255" fill="url(#tg)"/>
+  <rect x="0" y="0"   width="1200" height="385" fill="url(#tg)"/>
   <rect x="0" y="480" width="1200" height="150" fill="url(#bg)"/>
 
   <text x="80" y="72"
         font-family="'Noto Sans JP','Yu Gothic','Meiryo','MS Gothic',sans-serif"
-        font-size="25" font-weight="700" fill="#FFFFFF" opacity="0.9">こるちゃファンド</text>
+        font-size="32" font-weight="700" fill="#FFFFFF" opacity="0.9">こるちゃファンド</text>
   <text x="1120" y="72"
         font-family="'Inter','Noto Sans JP',sans-serif"
-        font-size="19" fill="#8899CC" text-anchor="end">{date}</text>
+        font-size="24" fill="#8899CC" text-anchor="end">{date}</text>
   <rect x="80" y="97" width="1040" height="1" fill="#FFFFFF" opacity="0.15"/>
 
-  <text x="80" y="138"
+  <text x="80" y="140"
         font-family="'Noto Sans JP','Yu Gothic',sans-serif"
-        font-size="16" fill="#8899CC">発行時点の総評価額</text>
-  <text x="80" y="222"
+        font-size="21" fill="#8899CC">発行時点の総評価額</text>
+  <text x="80" y="248"
         font-family="'Inter','Noto Sans JP','Yu Gothic',sans-serif"
-        font-size="72" font-weight="900" fill="#FFFFFF" letter-spacing="-1">{value}</text>
-  <text x="80" y="278"
+        font-size="88" font-weight="900" fill="#FFFFFF" letter-spacing="-1">{value}</text>
+  <text x="80" y="312"
         font-family="'Inter','Noto Sans JP','Yu Gothic',sans-serif"
-        font-size="34" font-weight="700" fill="{pnl_color}">{pnl}</text>
-  <text x="80" y="320"
+        font-size="44" font-weight="700" fill="{pnl_color}">{pnl}</text>
+  <text x="80" y="364"
         font-family="'Noto Sans JP','Yu Gothic',sans-serif"
-        font-size="19" fill="#7788BB">{cost}</text>
+        font-size="25" fill="#7788BB">{cost}</text>
 
   <rect x="80" y="507" width="1040" height="1" fill="#FFFFFF" opacity="0.15"/>
 
-  <text x="80"  y="548"
+  <text x="80"  y="552"
         font-family="'Noto Sans JP','Inter',sans-serif"
-        font-size="17" fill="#6677AA">前日比</text>
-  <text x="170" y="548"
+        font-size="22" fill="#6677AA">前日比</text>
+  <text x="175" y="552"
         font-family="'Inter','Noto Sans JP',sans-serif"
-        font-size="19" font-weight="600" fill="{day_color}">{day_str}</text>
-  <text x="660" y="548"
+        font-size="24" font-weight="600" fill="{day_color}">{day_str}</text>
+  <text x="660" y="552"
         font-family="'Noto Sans JP','Inter',sans-serif"
-        font-size="17" fill="#6677AA">前月比</text>
-  <text x="750" y="548"
+        font-size="22" fill="#6677AA">前月比</text>
+  <text x="755" y="552"
         font-family="'Inter','Noto Sans JP',sans-serif"
-        font-size="19" font-weight="600" fill="{month_color}">{month_str}</text>
+        font-size="24" font-weight="600" fill="{month_color}">{month_str}</text>
 
-  <text x="80" y="597"
+  <text x="80" y="602"
         font-family="'Inter','Noto Sans JP',monospace,sans-serif"
-        font-size="19" fill="#FFFFFF" opacity="0.45" letter-spacing="1">{symbols}</text>
-  <text x="1120" y="597"
+        font-size="22" fill="#FFFFFF" opacity="0.45" letter-spacing="1">{symbols}</text>
+  <text x="1120" y="602"
         font-family="'Inter',sans-serif"
-        font-size="14" fill="#FFFFFF" opacity="0.3" text-anchor="end">fund.korucha.com</text>
+        font-size="18" fill="#FFFFFF" opacity="0.3" text-anchor="end">fund.korucha.com</text>
 </svg>"##,
         chart = chart,
         date = date_str,
@@ -267,9 +267,9 @@ fn ticker_svg(
         if let Some(fx) = fx_rate_at_issue {
             let jpy = xml_escape(&format_with_commas(issue_price_native * fx));
             format!(
-                r##"<text x="80" y="295"
+                r##"<text x="80" y="315"
         font-family="'Inter','Noto Sans JP',sans-serif"
-        font-size="24" fill="#8899CC">≈ ¥{jpy}</text>"##
+        font-size="30" fill="#8899CC">≈ ¥{jpy}</text>"##
             )
         } else { String::new() }
     } else { String::new() };
@@ -283,12 +283,12 @@ fn ticker_svg(
             let pnl_str   = xml_escape(&format!("{}¥{}  ({})", pnl_sign, format_with_commas(pnl.abs()), signed_pct(pnl_pct)));
             let qty_str   = xml_escape(&format!("保有数 {:.2} 株", qty));
             format!(
-                r##"<text x="80" y="340"
+                r##"<text x="80" y="365"
         font-family="'Inter','Noto Sans JP','Yu Gothic',sans-serif"
-        font-size="32" font-weight="700" fill="{pnl_color}">{pnl_str}</text>
-  <text x="80" y="383"
+        font-size="44" font-weight="700" fill="{pnl_color}">{pnl_str}</text>
+  <text x="80" y="420"
         font-family="'Noto Sans JP','Yu Gothic',sans-serif"
-        font-size="19" fill="#7788BB">{qty_str}</text>"##
+        font-size="25" fill="#7788BB">{qty_str}</text>"##
             )
         }
         _ => String::new(),
@@ -313,44 +313,44 @@ fn ticker_svg(
       <stop offset="100%" stop-color="#000060" stop-opacity="1.0"/>
     </linearGradient>
   </defs>
-  <rect x="0" y="0"   width="1200" height="255" fill="url(#tg)"/>
+  <rect x="0" y="0"   width="1200" height="385" fill="url(#tg)"/>
   <rect x="0" y="480" width="1200" height="150" fill="url(#bg)"/>
 
   <text x="80" y="72"
         font-family="'Noto Sans JP','Yu Gothic','Meiryo','MS Gothic',sans-serif"
-        font-size="25" font-weight="700" fill="#FFFFFF" opacity="0.9">こるちゃファンド</text>
+        font-size="32" font-weight="700" fill="#FFFFFF" opacity="0.9">こるちゃファンド</text>
   <text x="1120" y="72"
         font-family="'Inter','Noto Sans JP',sans-serif"
-        font-size="19" fill="#8899CC" text-anchor="end">{date}</text>
+        font-size="24" fill="#8899CC" text-anchor="end">{date}</text>
   <rect x="80" y="97" width="1040" height="1" fill="#FFFFFF" opacity="0.15"/>
 
-  <text x="80" y="138"
+  <text x="80" y="140"
         font-family="'Noto Sans JP','Yu Gothic','Inter',sans-serif"
-        font-size="21" fill="#8899CC">{name}</text>
-  <text x="80" y="222"
+        font-size="28" fill="#8899CC">{name}</text>
+  <text x="80" y="248"
         font-family="'Inter','Noto Sans JP','Yu Gothic',sans-serif"
-        font-size="72" font-weight="900" fill="#FFFFFF" letter-spacing="-1">{price}</text>
+        font-size="88" font-weight="900" fill="#FFFFFF" letter-spacing="-1">{price}</text>
   {jpy_line}
   {pnl_lines}
 
   <rect x="80" y="507" width="1040" height="1" fill="#FFFFFF" opacity="0.15"/>
 
-  <text x="80"  y="548"
+  <text x="80"  y="552"
         font-family="'Noto Sans JP','Inter',sans-serif"
-        font-size="17" fill="#6677AA">前日比</text>
-  <text x="170" y="548"
+        font-size="22" fill="#6677AA">前日比</text>
+  <text x="175" y="552"
         font-family="'Inter','Noto Sans JP',sans-serif"
-        font-size="19" font-weight="600" fill="{day_color}">{day_str}</text>
-  <text x="660" y="548"
+        font-size="24" font-weight="600" fill="{day_color}">{day_str}</text>
+  <text x="660" y="552"
         font-family="'Noto Sans JP','Inter',sans-serif"
-        font-size="17" fill="#6677AA">前月比</text>
-  <text x="750" y="548"
+        font-size="22" fill="#6677AA">前月比</text>
+  <text x="755" y="552"
         font-family="'Inter','Noto Sans JP',sans-serif"
-        font-size="19" font-weight="600" fill="{month_color}">{month_str}</text>
+        font-size="24" font-weight="600" fill="{month_color}">{month_str}</text>
 
-  <text x="1120" y="597"
+  <text x="1120" y="602"
         font-family="'Inter',sans-serif"
-        font-size="14" fill="#FFFFFF" opacity="0.3" text-anchor="end">fund.korucha.com</text>
+        font-size="18" fill="#FFFFFF" opacity="0.3" text-anchor="end">fund.korucha.com</text>
 </svg>"##,
         chart = chart,
         date = date_str,
