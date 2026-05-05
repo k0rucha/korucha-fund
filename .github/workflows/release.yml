@@ -24,10 +24,6 @@ jobs:
             target: aarch64-apple-darwin
             artifact_name: korucha-fund
             asset_name: korucha-fund-macos-aarch64.tar.gz
-          - os: macos-13
-            target: x86_64-apple-darwin
-            artifact_name: korucha-fund
-            asset_name: korucha-fund-macos-x86_64.tar.gz
 
     steps:
       - uses: actions/checkout@v4
