@@ -35,6 +35,18 @@ pub struct DashboardTemplate {
     pub total_unrealized_pnl_jpy_num: f64,
     pub total_unrealized_pnl_pct: String,
     pub total_unrealized_pnl_pct_num: f64,
+    // Day-over-day deltas (vs. previous trading day snapshot).
+    pub dod_available: bool,
+    pub dod_ref_date: String,
+    pub dod_value_delta: String,
+    pub dod_value_delta_num: f64,
+    pub dod_value_pct: String,
+    pub dod_cost_delta: String,
+    pub dod_cost_delta_num: f64,
+    pub dod_pnl_delta: String,
+    pub dod_pnl_delta_num: f64,
+    pub dod_pnl_pct_delta: String,
+    pub dod_pnl_pct_delta_num: f64,
     // Month-over-month deltas (vs. snapshot closest to ~30 days ago).
     pub mom_available: bool,
     pub mom_ref_date: String,
@@ -163,6 +175,43 @@ pub async fn dashboard_index(State(state): State<AppState>) -> Result<impl IntoR
         mom_pnl_pct_delta_num = total_unrealized_pnl_pct - prev_pnl_pct;
     }
 
+    // Day-over-day deltas: compare against the most recent snapshot before
+    // today (i.e. yesterday or the last trading day). Suppress if the result
+    // is older than 7 days — a stale snapshot is not meaningful as "prev day".
+    let yesterday = today - chrono::Duration::days(1);
+    let dod_floor = today - chrono::Duration::days(7);
+    let prev_dod_snap = snapshots::get_snapshot_on_or_before(&state.db, yesterday)
+        .await
+        .unwrap_or(None)
+        .filter(|s| s.date >= dod_floor);
+
+    let mut dod_available = false;
+    let mut dod_ref_date = String::new();
+    let mut dod_value_delta_num = 0.0_f64;
+    let mut dod_value_pct_num = 0.0_f64;
+    let mut dod_cost_delta_num = 0.0_f64;
+    let mut dod_pnl_delta_num = 0.0_f64;
+    let mut dod_pnl_pct_delta_num = 0.0_f64;
+
+    if let Some(s) = prev_dod_snap {
+        dod_available = true;
+        dod_ref_date = s.date.to_string();
+        dod_value_delta_num = total_value_jpy - s.total_value_jpy;
+        dod_value_pct_num = if s.total_value_jpy > 0.0 {
+            (dod_value_delta_num / s.total_value_jpy) * 100.0
+        } else {
+            0.0
+        };
+        dod_cost_delta_num = total_cost_jpy - s.total_cost_jpy;
+        dod_pnl_delta_num = total_unrealized_pnl_jpy - s.unrealized_pnl_jpy;
+        let prev_pnl_pct = if s.total_cost_jpy > 0.0 {
+            (s.unrealized_pnl_jpy / s.total_cost_jpy) * 100.0
+        } else {
+            0.0
+        };
+        dod_pnl_pct_delta_num = total_unrealized_pnl_pct - prev_pnl_pct;
+    }
+
     Ok(DashboardTemplate {
         holdings: holding_views,
         total_cost_jpy: format_with_commas(total_cost_jpy),
@@ -171,6 +220,17 @@ pub async fn dashboard_index(State(state): State<AppState>) -> Result<impl IntoR
         total_unrealized_pnl_jpy_num: total_unrealized_pnl_jpy,
         total_unrealized_pnl_pct: format!("{:.2}", total_unrealized_pnl_pct),
         total_unrealized_pnl_pct_num: total_unrealized_pnl_pct,
+        dod_available,
+        dod_ref_date,
+        dod_value_delta: format_with_commas(dod_value_delta_num.abs()),
+        dod_value_delta_num,
+        dod_value_pct: signed_pct(dod_value_pct_num),
+        dod_cost_delta: format_with_commas(dod_cost_delta_num.abs()),
+        dod_cost_delta_num,
+        dod_pnl_delta: format_with_commas(dod_pnl_delta_num.abs()),
+        dod_pnl_delta_num,
+        dod_pnl_pct_delta: format!("{:.2}pt", dod_pnl_pct_delta_num.abs()),
+        dod_pnl_pct_delta_num,
         mom_available,
         mom_ref_date,
         // Absolute strings — templates render the sign + ¥ in the right
