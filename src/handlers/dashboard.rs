@@ -23,6 +23,18 @@ pub struct HoldingView {
     pub unrealized_pnl_jpy_num: f64,
     pub unrealized_pnl_pct: String,
     pub unrealized_pnl_pct_num: f64,
+    // Day-over-day deltas for this holding
+    pub dod_available: bool,
+    pub dod_pnl_jpy: String,
+    pub dod_pnl_jpy_num: f64,
+    pub dod_pnl_pct: String,
+    pub dod_pnl_pct_num: f64,
+    // Month-over-month deltas for this holding
+    pub mom_available: bool,
+    pub mom_pnl_jpy: String,
+    pub mom_pnl_jpy_num: f64,
+    pub mom_pnl_pct: String,
+    pub mom_pnl_pct_num: f64,
 }
 
 #[derive(Template)]
@@ -85,6 +97,10 @@ pub async fn dashboard_index(State(state): State<AppState>) -> Result<impl IntoR
         .filter_map(|s| s.name.map(|n| (s.symbol, n)))
         .collect();
 
+    let today = jst_today();
+    let yesterday = today - chrono::Duration::days(1);
+    let one_month_ago = today - chrono::Duration::days(30);
+
     let mut holding_views = Vec::new();
     let mut total_cost_jpy = 0.0;
     let mut total_value_jpy = 0.0;
@@ -106,6 +122,35 @@ pub async fn dashboard_index(State(state): State<AppState>) -> Result<impl IntoR
 
         let display_name = name_map.get(&h.symbol).cloned().unwrap_or_default();
 
+        // Per-holding dod/mom: compare current value vs prev price × current quantity.
+        let is_jpy = h.symbol.ends_with(".T");
+        let dod_prev_price = prices::get_price_on_or_before(&state.db, &h.symbol, yesterday).await.unwrap_or(None);
+        let mom_prev_price = prices::get_price_on_or_before(&state.db, &h.symbol, one_month_ago).await.unwrap_or(None);
+
+        let (dod_available, dod_pnl_jpy_num, dod_pnl_pct_num) = if let Some(pp) = dod_prev_price {
+            let prev_fx = if is_jpy { 1.0 } else {
+                fx::get_usdjpy_on_or_before(&state.db, yesterday).await.unwrap_or(None).unwrap_or(usdjpy)
+            };
+            let prev_value = h.quantity * pp * prev_fx;
+            let delta = current_value_jpy - prev_value;
+            let pct = if prev_value > 0.0 { (delta / prev_value) * 100.0 } else { 0.0 };
+            (true, delta, pct)
+        } else {
+            (false, 0.0, 0.0)
+        };
+
+        let (mom_available, mom_pnl_jpy_num, mom_pnl_pct_num) = if let Some(pp) = mom_prev_price {
+            let prev_fx = if is_jpy { 1.0 } else {
+                fx::get_usdjpy_on_or_before(&state.db, one_month_ago).await.unwrap_or(None).unwrap_or(usdjpy)
+            };
+            let prev_value = h.quantity * pp * prev_fx;
+            let delta = current_value_jpy - prev_value;
+            let pct = if prev_value > 0.0 { (delta / prev_value) * 100.0 } else { 0.0 };
+            (true, delta, pct)
+        } else {
+            (false, 0.0, 0.0)
+        };
+
         holding_views.push(HoldingView {
             symbol: h.symbol,
             name: display_name,
@@ -123,6 +168,16 @@ pub async fn dashboard_index(State(state): State<AppState>) -> Result<impl IntoR
             unrealized_pnl_jpy_num: unrealized_pnl_jpy,
             unrealized_pnl_pct: format!("{:.2}", unrealized_pnl_pct),
             unrealized_pnl_pct_num: unrealized_pnl_pct,
+            dod_available,
+            dod_pnl_jpy: format_with_commas(dod_pnl_jpy_num.abs()),
+            dod_pnl_jpy_num,
+            dod_pnl_pct: format!("{:.2}", dod_pnl_pct_num.abs()),
+            dod_pnl_pct_num,
+            mom_available,
+            mom_pnl_jpy: format_with_commas(mom_pnl_jpy_num.abs()),
+            mom_pnl_jpy_num,
+            mom_pnl_pct: format!("{:.2}", mom_pnl_pct_num.abs()),
+            mom_pnl_pct_num,
         });
     }
 
@@ -140,8 +195,6 @@ pub async fn dashboard_index(State(state): State<AppState>) -> Result<impl IntoR
     // days ago. If the closest available snapshot is much older than that
     // window (say, no data in the last 60 days), the comparison would be
     // misleading ("MoM" but actually a 6-month delta), so we suppress it.
-    let today = jst_today();
-    let one_month_ago = today - chrono::Duration::days(30);
     let mom_floor = today - chrono::Duration::days(60);
     let prev_snap = snapshots::get_snapshot_on_or_before(&state.db, one_month_ago)
         .await
@@ -178,7 +231,6 @@ pub async fn dashboard_index(State(state): State<AppState>) -> Result<impl IntoR
     // Day-over-day deltas: compare against the most recent snapshot before
     // today (i.e. yesterday or the last trading day). Suppress if the result
     // is older than 7 days — a stale snapshot is not meaningful as "prev day".
-    let yesterday = today - chrono::Duration::days(1);
     let dod_floor = today - chrono::Duration::days(7);
     let prev_dod_snap = snapshots::get_snapshot_on_or_before(&state.db, yesterday)
         .await

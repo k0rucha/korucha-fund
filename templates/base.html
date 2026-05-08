@@ -183,6 +183,22 @@
             pointer-events: auto;
         }
 
+        /* Share modal animation */
+        #shareModal {
+            transition: opacity 0.15s ease;
+        }
+        #shareModal.modal-hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #shareModal > .da-card {
+            transition: transform 0.15s ease, opacity 0.15s ease;
+        }
+        #shareModal.modal-hidden > .da-card {
+            transform: scale(0.95);
+            opacity: 0;
+        }
+
         /* Simple circular loader used inside the modal */
         .custom-loader {
             width: 48px;
@@ -381,7 +397,7 @@
 
     <!-- Share-card modal: 3 steps
          (mode picker → fund-span / ticker-input → URL display) -->
-    <div id="shareModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4" style="background: rgba(0,0,0,0.4);">
+    <div id="shareModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-hidden" style="background: rgba(0,0,0,0.4);">
         <div class="da-card p-7 max-w-md w-full">
             <!-- Step 0: choose mode -->
             <div id="shareStep0">
@@ -569,16 +585,19 @@
             function showStep(step) {
                 [step0, step1Fund, step1Ticker, step2].forEach(s => s.classList.add('hidden'));
                 step.classList.remove('hidden');
+                step.style.opacity = '0';
+                requestAnimationFrame(() => {
+                    step.style.transition = 'opacity 0.12s ease';
+                    step.style.opacity = '1';
+                });
             }
             function open() {
-                modal.classList.remove('hidden');
-                modal.classList.add('flex');
                 showStep(step0);
                 tickerError.classList.add('hidden');
+                modal.classList.remove('modal-hidden');
             }
             function close() {
-                modal.classList.add('hidden');
-                modal.classList.remove('flex');
+                modal.classList.add('modal-hidden');
             }
             function showStep2(url) {
                 input.value = url;
@@ -660,8 +679,14 @@
             function setTickerSpan(span) {
                 currentTickerSpan = span;
                 tickerSpanBtns.forEach(b => {
-                    if (b.dataset.span === span) b.classList.add('bg-da-blue-1200', 'text-white');
-                    else b.classList.remove('bg-da-blue-1200', 'text-white');
+                    if (b.dataset.span === span) {
+                        b.classList.add('bg-da-blue-1200', 'text-white');
+                        b.classList.remove('hover:bg-da-blue-50', 'text-da-blue-900');
+                        b.classList.add('hover:bg-da-blue-900');
+                    } else {
+                        b.classList.remove('bg-da-blue-1200', 'text-white', 'hover:bg-da-blue-900');
+                        b.classList.add('hover:bg-da-blue-50', 'text-da-blue-900');
+                    }
                 });
             }
             tickerSpanBtns.forEach(b => {

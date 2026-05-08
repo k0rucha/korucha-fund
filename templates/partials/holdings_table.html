@@ -1,6 +1,11 @@
 <div class="da-card overflow-hidden">
-    <div class="px-6 py-5 border-b border-da-gray-200 bg-da-gray-50/50">
+    <div class="px-6 py-5 border-b border-da-gray-200 bg-da-gray-50/50 flex items-center justify-between">
         <h3 class="text-base font-bold text-da-gray-800 tracking-wide">銘柄一覧</h3>
+        <div class="flex gap-1" id="holdings-mode-toggle">
+            <button class="holdings-toggle px-3 py-1 text-sm font-medium rounded border transition-colors active" data-mode="cumulative">累計</button>
+            <button class="holdings-toggle px-3 py-1 text-sm font-medium rounded border transition-colors" data-mode="dod">前日比</button>
+            <button class="holdings-toggle px-3 py-1 text-sm font-medium rounded border transition-colors" data-mode="mom">先月比</button>
+        </div>
     </div>
     <div class="overflow-x-auto">
         <table id="holdings-sortable" class="min-w-full text-base">
@@ -12,8 +17,8 @@
                     <th class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="avg-cost">取得単価<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
                     <th class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="cur-price">現在価格<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
                     <th class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="value">評価額 (¥)<span class="sort-arrow ml-1 text-da-blue-900">▼</span></th>
-                    <th class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="pnl">損益 (¥)<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
-                    <th class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="pnl-pct">損益率<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
+                    <th class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="pnl" id="th-pnl">損益 (¥)<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
+                    <th class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="pnl-pct" id="th-pnl-pct">損益率<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-da-gray-200">
@@ -25,10 +30,28 @@
                     <td class="px-6 py-4 whitespace-nowrap text-right text-da-gray-700" data-sort="{{ h.average_cost_native_num }}">{{ h.average_cost_native }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-da-gray-700" data-sort="{{ h.current_price_native_num }}">{{ h.current_price_native }}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-right text-da-gray-800 font-bold" data-sort="{{ h.current_value_jpy_num }}">¥{{ h.current_value_jpy }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right font-bold {% if h.unrealized_pnl_jpy_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}" data-sort="{{ h.unrealized_pnl_jpy_num }}">
+                    <td class="holdings-pnl-cell px-6 py-4 whitespace-nowrap text-right font-bold {% if h.unrealized_pnl_jpy_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}"
+                        data-sort="{{ h.unrealized_pnl_jpy_num }}"
+                        data-cumulative-val="{{ h.unrealized_pnl_jpy_num }}"
+                        data-cumulative-str="{% if h.unrealized_pnl_jpy_num >= 0.0 %}+{% else %}-{% endif %}¥{{ h.unrealized_pnl_jpy }}"
+                        data-dod-available="{{ h.dod_available }}"
+                        data-dod-val="{{ h.dod_pnl_jpy_num }}"
+                        data-dod-str="{% if h.dod_pnl_jpy_num >= 0.0 %}+{% else %}-{% endif %}¥{{ h.dod_pnl_jpy }}"
+                        data-mom-available="{{ h.mom_available }}"
+                        data-mom-val="{{ h.mom_pnl_jpy_num }}"
+                        data-mom-str="{% if h.mom_pnl_jpy_num >= 0.0 %}+{% else %}-{% endif %}¥{{ h.mom_pnl_jpy }}">
                         {% if h.unrealized_pnl_jpy_num >= 0.0 %}+{% else %}-{% endif %}¥{{ h.unrealized_pnl_jpy }}
                     </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right font-bold {% if h.unrealized_pnl_pct_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}" data-sort="{{ h.unrealized_pnl_pct_num }}">
+                    <td class="holdings-pct-cell px-6 py-4 whitespace-nowrap text-right font-bold {% if h.unrealized_pnl_pct_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}"
+                        data-sort="{{ h.unrealized_pnl_pct_num }}"
+                        data-cumulative-val="{{ h.unrealized_pnl_pct_num }}"
+                        data-cumulative-str="{% if h.unrealized_pnl_pct_num >= 0.0 %}+{% endif %}{{ h.unrealized_pnl_pct }}%"
+                        data-dod-available="{{ h.dod_available }}"
+                        data-dod-val="{{ h.dod_pnl_pct_num }}"
+                        data-dod-str="{% if h.dod_pnl_pct_num >= 0.0 %}+{% else %}-{% endif %}{{ h.dod_pnl_pct }}%"
+                        data-mom-available="{{ h.mom_available }}"
+                        data-mom-val="{{ h.mom_pnl_pct_num }}"
+                        data-mom-str="{% if h.mom_pnl_pct_num >= 0.0 %}+{% else %}-{% endif %}{{ h.mom_pnl_pct }}%">
                         {% if h.unrealized_pnl_pct_num >= 0.0 %}+{% endif %}{{ h.unrealized_pnl_pct }}%
                     </td>
                 </tr>
@@ -54,6 +77,10 @@
     // Default state: value column descending (matches server-side default order).
     let currentCol = 'value';
     let currentDir = 'desc';
+    let currentMode = 'cumulative';
+
+    const modeLabels = { cumulative: '損益 (¥)', dod: '前日比 (¥)', mom: '先月比 (¥)' };
+    const modePctLabels = { cumulative: '損益率', dod: '前日比率', mom: '先月比率' };
 
     function colIndex(col) {
         const ths = table.querySelectorAll('th');
@@ -87,6 +114,81 @@
                 arrow.classList.remove('text-da-blue-900');
             }
         });
+    }
+
+    function applyMode(mode) {
+        currentMode = mode;
+
+        // Update column header labels
+        const thPnl = document.getElementById('th-pnl');
+        const thPct = document.getElementById('th-pnl-pct');
+        if (thPnl) thPnl.firstChild.textContent = modeLabels[mode];
+        if (thPct) thPct.firstChild.textContent = modePctLabels[mode];
+
+        // Update each row's pnl and pct cells
+        const pnlCells = tbody.querySelectorAll('.holdings-pnl-cell');
+        const pctCells = tbody.querySelectorAll('.holdings-pct-cell');
+
+        pnlCells.forEach(cell => {
+            const available = mode === 'cumulative' || cell.dataset[mode + 'Available'] === 'true';
+            if (!available) {
+                cell.textContent = '—';
+                cell.className = cell.className.replace(/text-emerald-600|text-red-600|text-da-gray-400/g, '').trim() + ' text-da-gray-400';
+                cell.dataset.sort = '0';
+                return;
+            }
+            const val = parseFloat(cell.dataset[mode + 'Val']);
+            const str = cell.dataset[mode + 'Str'];
+            cell.textContent = str;
+            cell.dataset.sort = val;
+            const colorClass = val >= 0 ? 'text-emerald-600' : 'text-red-600';
+            cell.className = cell.className.replace(/text-emerald-600|text-red-600|text-da-gray-400/g, '').trim() + ' ' + colorClass;
+        });
+
+        pctCells.forEach(cell => {
+            const available = mode === 'cumulative' || cell.dataset[mode + 'Available'] === 'true';
+            if (!available) {
+                cell.textContent = '—';
+                cell.className = cell.className.replace(/text-emerald-600|text-red-600|text-da-gray-400/g, '').trim() + ' text-da-gray-400';
+                cell.dataset.sort = '0';
+                return;
+            }
+            const val = parseFloat(cell.dataset[mode + 'Val']);
+            const str = cell.dataset[mode + 'Str'];
+            cell.textContent = str;
+            cell.dataset.sort = val;
+            const colorClass = val >= 0 ? 'text-emerald-600' : 'text-red-600';
+            cell.className = cell.className.replace(/text-emerald-600|text-red-600|text-da-gray-400/g, '').trim() + ' ' + colorClass;
+        });
+
+        // Re-apply sort if current sort column is pnl/pnl-pct
+        if (currentCol === 'pnl' || currentCol === 'pnl-pct') {
+            sortBy(currentCol, currentDir);
+        }
+    }
+
+    // Toggle button styling and behavior
+    const toggleBtns = document.querySelectorAll('.holdings-toggle');
+    toggleBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            toggleBtns.forEach(b => {
+                b.classList.remove('active', 'bg-da-blue-900', 'text-white', 'border-da-blue-900');
+                b.classList.add('border-da-gray-300', 'text-da-gray-600', 'hover:bg-da-gray-50');
+            });
+            btn.classList.add('active', 'bg-da-blue-900', 'text-white', 'border-da-blue-900');
+            btn.classList.remove('border-da-gray-300', 'text-da-gray-600', 'hover:bg-da-gray-50');
+            applyMode(btn.dataset.mode);
+        });
+    });
+
+    // Initialize active button style
+    const activeBtn = document.querySelector('.holdings-toggle.active');
+    if (activeBtn) {
+        toggleBtns.forEach(b => {
+            b.classList.add('border-da-gray-300', 'text-da-gray-600', 'hover:bg-da-gray-50');
+        });
+        activeBtn.classList.remove('border-da-gray-300', 'text-da-gray-600', 'hover:bg-da-gray-50');
+        activeBtn.classList.add('bg-da-blue-900', 'text-white', 'border-da-blue-900');
     }
 
     headers.forEach(h => {
