@@ -40,3 +40,27 @@ pub async fn update_symbol_name(pool: &SqlitePool, symbol: &str, name: &str, exc
     .await?;
     Ok(())
 }
+
+pub async fn upsert_symbol(
+    pool: &SqlitePool,
+    symbol: &str,
+    name: Option<&str>,
+    currency: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO symbols (symbol, name, currency, updated_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(symbol) DO UPDATE SET
+            name = COALESCE(excluded.name, symbols.name),
+            currency = excluded.currency,
+            updated_at = CURRENT_TIMESTAMP
+        "#,
+    )
+    .bind(symbol)
+    .bind(name)
+    .bind(currency)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
