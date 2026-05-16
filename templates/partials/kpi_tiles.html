@@ -37,10 +37,13 @@
         </div>
         {% endif %}
     </div>
-    <div class="da-card p-7 {% if total_unrealized_pnl_jpy_num >= 0.0 %}kpi-green{% else %}kpi-red{% endif %} relative group {% if dod_available || mom_available %}cursor-help{% endif %}">
+    <div class="da-card p-7 {% if total_unrealized_pnl_jpy_num < 0.0 %}kpi-red{% else %}kpi-green{% endif %} relative group {% if dod_available || mom_available %}cursor-help{% endif %}">
         <div class="text-sm font-bold text-da-gray-600 uppercase tracking-wider mb-4">含み損益</div>
-        <div class="text-4xl font-black leading-none tabular-nums {% if total_unrealized_pnl_jpy_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}">
-            {% if total_unrealized_pnl_jpy_num >= 0.0 %}+{% else %}-{% endif %}¥{{ total_unrealized_pnl_jpy }}
+        <div class="text-4xl font-black leading-none tabular-nums {% if total_unrealized_pnl_jpy_num < 0.0 %}text-red-600{% else %}text-emerald-600{% endif %}">
+            {% if total_unrealized_pnl_jpy_num < 0.0 %}-{% else %}+{% endif %}¥{{ total_unrealized_pnl_jpy }}
+        </div>
+        <div class="mt-3 text-xs text-da-gray-500 tabular-nums">
+            <span class="font-semibold {% if total_unrealized_pnl_pct_num < 0.0 %}text-red-600{% else %}text-emerald-600{% endif %}">{% if total_unrealized_pnl_pct_num < 0.0 %}{% else %}+{% endif %}{{ total_unrealized_pnl_pct }}%</span>
         </div>
         {% if dod_available || mom_available %}
         <div class="mom-tooltip">
@@ -56,23 +59,13 @@
         </div>
         {% endif %}
     </div>
-    <div class="da-card p-7 {% if total_unrealized_pnl_pct_num >= 0.0 %}kpi-green{% else %}kpi-red{% endif %} relative group {% if dod_available || mom_available %}cursor-help{% endif %}">
-        <div class="text-sm font-bold text-da-gray-600 uppercase tracking-wider mb-4">損益率</div>
-        <div class="text-4xl font-black leading-none tabular-nums {% if total_unrealized_pnl_pct_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}">
-            {% if total_unrealized_pnl_pct_num >= 0.0 %}+{% endif %}{{ total_unrealized_pnl_pct }}%
+    <div class="da-card p-7 {% if cumulative_pnl_jpy_num >= 0.0 %}kpi-green{% else %}kpi-red{% endif %}">
+        <div class="text-sm font-bold text-da-gray-600 uppercase tracking-wider mb-4">累計損益</div>
+        <div class="text-4xl font-black leading-none tabular-nums {% if cumulative_pnl_jpy_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}">
+            {% if cumulative_pnl_jpy_num >= 0.0 %}+{% else %}-{% endif %}¥{{ cumulative_pnl_jpy }}
         </div>
-        {% if dod_available || mom_available %}
-        <div class="mom-tooltip">
-            {% if dod_available %}
-            <div class="text-[10px] text-da-gray-400 uppercase tracking-wider mb-1">前日比 ({{ dod_ref_date }})</div>
-            <div class="font-bold {% if dod_pnl_pct_delta_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %} {% if mom_available %}mb-2{% endif %}">{% if dod_pnl_pct_delta_num >= 0.0 %}+{% else %}-{% endif %}{{ dod_pnl_pct_delta }}</div>
-            {% endif %}
-            {% if mom_available %}
-            {% if dod_available %}<div class="border-t border-da-gray-200 my-1 opacity-40"></div>{% endif %}
-            <div class="text-[10px] text-da-gray-400 uppercase tracking-wider mb-1">先月比 ({{ mom_ref_date }})</div>
-            <div class="font-bold {% if mom_pnl_pct_delta_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}">{% if mom_pnl_pct_delta_num >= 0.0 %}+{% else %}-{% endif %}{{ mom_pnl_pct_delta }}</div>
-            {% endif %}
+        <div class="mt-3 text-xs text-da-gray-500 tabular-nums">
+            うち実現&nbsp;<span class="font-semibold {% if realized_pnl_jpy_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}">{% if realized_pnl_jpy_num >= 0.0 %}+{% else %}-{% endif %}¥{{ realized_pnl_jpy }}</span>
         </div>
-        {% endif %}
     </div>
 </div>
