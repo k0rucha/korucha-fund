@@ -91,7 +91,8 @@ pub fn calculate_realized_pnl(transactions: &[Transaction]) -> f64 {
         } else if tx.txn_type == "SELL" && *qty > 0.0 {
             let sell_qty = tx.quantity.min(*qty);
             let cost_allocated = *cost_jpy * (sell_qty / *qty);
-            let proceeds_jpy = (tx.price * sell_qty - tx.fee) * fx_rate;
+            let prorated_fee = if tx.quantity > 0.0 { tx.fee * (sell_qty / tx.quantity) } else { 0.0 };
+            let proceeds_jpy = (tx.price * sell_qty - prorated_fee) * fx_rate;
             realized_pnl += proceeds_jpy - cost_allocated;
 
             let new_qty = (*qty - sell_qty).max(0.0);
