@@ -68,6 +68,46 @@ pub fn calculate_holdings(transactions: &[Transaction]) -> Vec<Holding> {
     holdings
 }
 
+/// 全SELL取引から実現損益 (JPY) を算出して返す。
+/// 加重平均コスト法 — calculate_holdings() と同一ロジックで cost_jpy を追跡し、
+/// 売却時に「売却分に配賦されたコスト」と「売却益」の差を累積する。
+pub fn calculate_realized_pnl(transactions: &[Transaction]) -> f64 {
+    let mut qty_map: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
+    let mut cost_map: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
+    let mut realized_pnl = 0.0;
+
+    let mut sorted_txs = transactions.to_vec();
+    sorted_txs.sort_by(|a, b| a.txn_date.cmp(&b.txn_date).then(a.id.cmp(&b.id)));
+
+    for tx in &sorted_txs {
+        let qty = qty_map.entry(tx.symbol.clone()).or_insert(0.0);
+        let cost_jpy = cost_map.entry(tx.symbol.clone()).or_insert(0.0);
+        let fx_rate = tx.fx_rate_to_jpy.unwrap_or(1.0);
+
+        if tx.txn_type == "BUY" {
+            let native_cost = tx.price * tx.quantity + tx.fee;
+            *cost_jpy += native_cost * fx_rate;
+            *qty += tx.quantity;
+        } else if tx.txn_type == "SELL" && *qty > 0.0 {
+            let sell_qty = tx.quantity.min(*qty);
+            let cost_allocated = *cost_jpy * (sell_qty / *qty);
+            let proceeds_jpy = (tx.price * sell_qty - tx.fee) * fx_rate;
+            realized_pnl += proceeds_jpy - cost_allocated;
+
+            let new_qty = (*qty - sell_qty).max(0.0);
+            if new_qty <= 0.0 {
+                *qty = 0.0;
+                *cost_jpy = 0.0;
+            } else {
+                *cost_jpy -= cost_allocated;
+                *qty = new_qty;
+            }
+        }
+    }
+
+    realized_pnl
+}
+
 pub fn calculate_holdings_as_of(transactions: &[Transaction], as_of: NaiveDate) -> Vec<Holding> {
     let filtered: Vec<Transaction> = transactions
         .iter()

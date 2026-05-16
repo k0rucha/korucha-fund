@@ -59,6 +59,11 @@ pub struct DashboardTemplate {
     pub dod_pnl_delta_num: f64,
     pub dod_pnl_pct_delta: String,
     pub dod_pnl_pct_delta_num: f64,
+    // Realized & cumulative P&L
+    pub realized_pnl_jpy: String,
+    pub realized_pnl_jpy_num: f64,
+    pub cumulative_pnl_jpy: String,
+    pub cumulative_pnl_jpy_num: f64,
     // Month-over-month deltas (vs. snapshot closest to ~30 days ago).
     pub mom_available: bool,
     pub mom_ref_date: String,
@@ -80,6 +85,7 @@ pub async fn dashboard_index(State(state): State<AppState>) -> Result<impl IntoR
     })?;
 
     let holdings = portfolio::calculate_holdings(&txs);
+    let realized_pnl_jpy_num = portfolio::calculate_realized_pnl(&txs);
 
     let latest_prices = prices::get_latest_prices(&state.db).await.unwrap_or_default();
     let price_map: HashMap<String, f64> = latest_prices.into_iter().map(|p| (p.symbol, p.close_price)).collect();
@@ -264,6 +270,8 @@ pub async fn dashboard_index(State(state): State<AppState>) -> Result<impl IntoR
         dod_pnl_pct_delta_num = total_unrealized_pnl_pct - prev_pnl_pct;
     }
 
+    let cumulative_pnl_jpy_num = realized_pnl_jpy_num + total_unrealized_pnl_jpy;
+
     Ok(DashboardTemplate {
         holdings: holding_views,
         total_cost_jpy: format_with_commas(total_cost_jpy),
@@ -296,5 +304,9 @@ pub async fn dashboard_index(State(state): State<AppState>) -> Result<impl IntoR
         mom_pnl_delta_num,
         mom_pnl_pct_delta: format!("{:.2}pt", mom_pnl_pct_delta_num.abs()),
         mom_pnl_pct_delta_num,
+        realized_pnl_jpy: format_with_commas(realized_pnl_jpy_num.abs()),
+        realized_pnl_jpy_num,
+        cumulative_pnl_jpy: format_with_commas(cumulative_pnl_jpy_num.abs()),
+        cumulative_pnl_jpy_num,
     })
 }
