@@ -104,7 +104,24 @@ pub async fn create_ticker_share_card(
     let currency = symbol_meta
         .map(|s| s.currency.clone())
         .unwrap_or_else(|| if raw_symbol.ends_with(".T") { "JPY".into() } else { "USD".into() });
-    let display_name = symbol_meta.and_then(|s| s.name.clone());
+    let mut display_name = symbol_meta.and_then(|s| s.name.clone());
+
+    // If name is missing (e.g. symbol not held), try fetching from Yahoo Finance.
+    if display_name.is_none() {
+        match yfinance::fetch_symbol_name(&raw_symbol).await {
+            Ok(Some(name)) => {
+                tracing::info!("ticker-share: fetched missing name for {}: {}", raw_symbol, name);
+                display_name = Some(name);
+            }
+            Ok(None) => tracing::info!("ticker-share: name not found for {} on Yahoo", raw_symbol),
+            Err(e) => tracing::warn!("ticker-share: failed to fetch name for {}: {}", raw_symbol, e),
+        }
+    }
+
+    // Upsert symbol meta so we have it for future cards/transactions.
+    if let Err(e) = symbols::upsert_symbol(&state.db, &raw_symbol, display_name.as_deref(), &currency).await {
+        tracing::warn!("ticker-share: failed to upsert symbol meta for {}: {}", raw_symbol, e);
+    }
 
     // FX at issue (only relevant for USD-denominated tickers).
     let fx_rate_at_issue = if currency == "USD" {
