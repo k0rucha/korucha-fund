@@ -2,6 +2,8 @@
 
 個人株式ポートフォリオを可視化する Web ダッシュボード。
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/k0rucha/korucha-fund)
+
 - **フロントページ** — 保有銘柄・損益・時系列グラフを公開表示
 - **管理画面** (`/admin`) — 取引履歴の追加・削除・CSV インポート/エクスポート（Basic Auth 保護）
 - **シェアカード** — ポートフォリオや個別銘柄のスナップショットを OGP 付きで共有
