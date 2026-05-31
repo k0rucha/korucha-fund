@@ -10,4 +10,6 @@ async def test_status_ok():
     ) as client:
         response = await client.get("/api/status")
     assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+    data = response.json()
+    assert "max_requests_per_day" in data
+    assert data["max_requests_per_day"] == 15
