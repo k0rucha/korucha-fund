@@ -26,7 +26,7 @@ jobs:
             asset_name: korucha-fund-macos-aarch64.tar.gz
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
