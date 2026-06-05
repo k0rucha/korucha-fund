@@ -4,6 +4,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script>
+        // Apply the saved theme before first paint (avoids a flash of the
+        // wrong theme). The data-theme attribute drives every CSS variable
+        // and the scoped Windows-95 rules further down. Also exposes a small
+        // palette for Chart.js, whose canvas colours can't be set via CSS.
+        (function () {
+            var t;
+            try { t = localStorage.getItem('korucha-theme'); } catch (e) {}
+            if (t !== 'win95') t = 'default';
+            document.documentElement.setAttribute('data-theme', t);
+            if (t === 'win95') {
+                // Retro Japanese bitmap font — only fetched when actually used.
+                var link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = 'https://fonts.googleapis.com/css2?family=DotGothic16&display=swap';
+                document.head.appendChild(link);
+            }
+            window.chartTheme = (t === 'win95') ? {
+                linePrimary: '#000080', tick: '#000000', grid: '#9a9a9a', legend: '#000000',
+                tooltipBg: '#ffffe1', tooltipTitle: '#000000', tooltipBody: '#000000', tooltipBorder: '#000000',
+                sliceBorder: '#000000',
+                // Classic VGA 16-colour palette — reads as period-correct on silver.
+                palette: ['#000080', '#008080', '#800000', '#808000', '#800080', '#008000', '#0000c0', '#c08000', '#008040', '#804000']
+            } : {
+                linePrimary: '#000060', tick: '#666666', grid: '#F0F0F0', legend: '#333333',
+                tooltipBg: '#FFFFFF', tooltipTitle: '#333333', tooltipBody: '#666666', tooltipBorder: '#E2E8F0',
+                sliceBorder: '#FFFFFF',
+                palette: ['#000060', '#004BB1', '#3E86E8', '#FB5801', '#FFBD44', '#0017C1', '#0061D3', '#A5C9FF', '#FFC700', '#666666']
+            };
+        })();
+    </script>
     <title>{% block title %}こるちゃファンド{% endblock %}</title>
     <meta name="description" content="{% block description %}こるちゃの個人株式ポートフォリオダッシュボード{% endblock %}">
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
@@ -13,24 +44,27 @@
         tailwind.config = {
             theme: {
                 extend: {
+                    // Colours resolve through CSS variables (RGB channels) so a
+                    // single `:root` / `[data-theme=...]` swap re-themes every
+                    // text-/bg-/border-da-* utility, opacity modifiers included.
                     colors: {
                         'da-blue': {
-                            1200: '#000060',
-                            900: '#0017C1',
-                            600: '#004BB1',
-                            50: '#F0F6FF',
+                            1200: 'rgb(var(--da-blue-1200) / <alpha-value>)',
+                            900: 'rgb(var(--da-blue-900) / <alpha-value>)',
+                            600: 'rgb(var(--da-blue-600) / <alpha-value>)',
+                            50: 'rgb(var(--da-blue-50) / <alpha-value>)',
                         },
                         'da-orange': {
-                            600: '#FB5801',
-                            400: '#FFBD44',
-                            50: '#FFEEE2',
+                            600: 'rgb(var(--da-orange-600) / <alpha-value>)',
+                            400: 'rgb(var(--da-orange-400) / <alpha-value>)',
+                            50: 'rgb(var(--da-orange-50) / <alpha-value>)',
                         },
                         'da-gray': {
-                            800: '#333333',
-                            600: '#666666',
-                            400: '#999999',
-                            200: '#E2E8F0',
-                            50: '#F8F8FB',
+                            800: 'rgb(var(--da-gray-800) / <alpha-value>)',
+                            600: 'rgb(var(--da-gray-600) / <alpha-value>)',
+                            400: 'rgb(var(--da-gray-400) / <alpha-value>)',
+                            200: 'rgb(var(--da-gray-200) / <alpha-value>)',
+                            50: 'rgb(var(--da-gray-50) / <alpha-value>)',
                         },
                     },
                     fontFamily: {
@@ -48,17 +82,67 @@
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <style>
+        :root {
+            /* da-* palette as RGB channels — consumed by tailwind.config above. */
+            --da-blue-1200: 0 0 96;
+            --da-blue-900: 0 23 193;
+            --da-blue-600: 0 75 177;
+            --da-blue-50: 240 246 255;
+            --da-orange-600: 251 88 1;
+            --da-orange-400: 255 189 68;
+            --da-orange-50: 255 238 226;
+            --da-gray-800: 51 51 51;
+            --da-gray-600: 102 102 102;
+            --da-gray-400: 153 153 153;
+            --da-gray-200: 226 232 240;
+            --da-gray-50: 248 248 251;
+            /* Component tokens (referenced by the hand-written CSS below). */
+            --page-bg: #F8F8FB;
+            --surface: #FFFFFF;
+            --surface-border: #E2E8F0;
+            --surface-radius: 8px;
+            --surface-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            --row-hover: #F0F6FF;
+        }
+
+        /* ===== Theme: Windows 95 — token overrides (structure further down) ===== */
+        [data-theme="win95"] {
+            --da-blue-1200: 0 0 128;
+            --da-blue-900: 0 0 128;
+            --da-blue-600: 0 0 128;
+            --da-blue-50: 216 216 216;
+            --da-orange-50: 216 216 216;
+            --da-gray-800: 0 0 0;
+            --da-gray-600: 26 26 26;
+            --da-gray-400: 64 64 64;
+            --da-gray-200: 128 128 128;
+            --da-gray-50: 192 192 192;
+            --page-bg: #008080;
+            --surface: #c0c0c0;
+            --surface-border: transparent;
+            --surface-radius: 0;
+            --surface-shadow:
+                inset -1px -1px #0a0a0a, inset 1px 1px #ffffff,
+                inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+            --row-hover: #d4d0c8;
+        }
+
         body {
-            background-color: #F8F8FB;
-            color: #333333;
+            background-color: var(--page-bg);
+            color: rgb(var(--da-gray-800));
             min-height: 100vh;
         }
 
         .da-card {
-            background: #FFFFFF;
-            border: 1px solid #E2E8F0;
-            border-radius: 8px;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            background: var(--surface);
+            border: 1px solid var(--surface-border);
+            border-radius: var(--surface-radius);
+            box-shadow: var(--surface-shadow);
+        }
+
+        /* Retro title bar lives in the markup but only shows under win95. */
+        .win95-titlebar {
+            display: none;
         }
 
         .kpi-blue {
@@ -101,7 +185,7 @@
         }
 
         .table-row-hover:hover {
-            background-color: #F0F6FF;
+            background-color: var(--row-hover);
         }
 
         .mom-tooltip {
@@ -324,6 +408,175 @@
                 opacity: 0;
             }
         }
+
+        /* ============================================================
+           Windows 95 theme — structural overrides (scoped to win95).
+           Token swaps above already recolour text/border/bg utilities;
+           the rules here add the silver/teal surfaces, square corners,
+           beveled controls, the window title bar and the retro font.
+           ============================================================ */
+        [data-theme="win95"] body,
+        [data-theme="win95"] input,
+        [data-theme="win95"] select,
+        [data-theme="win95"] button,
+        [data-theme="win95"] textarea,
+        [data-theme="win95"] table {
+            font-family: 'DotGothic16', 'MS PGothic', 'Courier New', monospace;
+            letter-spacing: 0;
+        }
+
+        /* Square corners everywhere (but keep the round loaders spinning). */
+        [data-theme="win95"] *:not(.custom-loader):not(.status-spin) {
+            border-radius: 0 !important;
+        }
+
+        /* App shell rendered as a window: silver fill, classic raised bevel. */
+        [data-theme="win95"] .app-shell {
+            background: #c0c0c0;
+            padding: 3px;
+            margin-top: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow:
+                inset -1px -1px #0a0a0a, inset 1px 1px #dfdfdf,
+                inset -2px -2px #808080, inset 2px 2px #ffffff;
+        }
+
+        /* Title bar with fake window controls (decorative). */
+        [data-theme="win95"] .win95-titlebar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin: 0 0 4px;
+            padding: 3px 3px 3px 6px;
+            background: linear-gradient(90deg, #000080, #1084d0);
+            color: #ffffff;
+            font-weight: 700;
+        }
+        [data-theme="win95"] .win95-titlebar-title {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        [data-theme="win95"] .win95-titlebar-buttons {
+            display: flex;
+            gap: 2px;
+            flex-shrink: 0;
+        }
+        [data-theme="win95"] .win95-titlebar-buttons span {
+            width: 18px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #c0c0c0;
+            color: #000;
+            font-size: 10px;
+            line-height: 1;
+            box-shadow:
+                inset -1px -1px #0a0a0a, inset 1px 1px #ffffff,
+                inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+        }
+
+        /* Header → toolbar, footer → status bar, trimmed gutters. */
+        [data-theme="win95"] .app-shell > header {
+            margin: 0;
+            padding: 8px;
+            border: none;
+            background: transparent;
+        }
+        [data-theme="win95"] .app-shell > main {
+            padding: 0 8px;
+        }
+        [data-theme="win95"] .app-shell > footer {
+            margin: 8px 0 0;
+            padding: 4px 8px;
+            border: none;
+            color: #000;
+            box-shadow: inset 1px 1px #808080, inset -1px -1px #ffffff;
+        }
+
+        /* Beveled push buttons: raised at rest, inset while pressed. */
+        [data-theme="win95"] .refresh-btn,
+        [data-theme="win95"] #createShareBtn,
+        [data-theme="win95"] #themeSelect,
+        [data-theme="win95"] .share-mode-btn,
+        [data-theme="win95"] .share-fund-span-btn,
+        [data-theme="win95"] .share-ticker-span-btn,
+        [data-theme="win95"] #shareTickerSubmit,
+        [data-theme="win95"] #copyShareBtn,
+        [data-theme="win95"] .span-btn,
+        [data-theme="win95"] .ts-span-btn,
+        [data-theme="win95"] .holdings-toggle {
+            background: #c0c0c0 !important;
+            color: #000000 !important;
+            border: none !important;
+            box-shadow:
+                inset -1px -1px #0a0a0a, inset 1px 1px #ffffff,
+                inset -2px -2px #808080, inset 2px 2px #dfdfdf !important;
+        }
+        [data-theme="win95"] .refresh-btn:active,
+        [data-theme="win95"] #createShareBtn:active,
+        [data-theme="win95"] .share-mode-btn:active,
+        [data-theme="win95"] #shareTickerSubmit:active,
+        [data-theme="win95"] #copyShareBtn:active,
+        [data-theme="win95"] .span-btn:active,
+        [data-theme="win95"] .ts-span-btn:active,
+        [data-theme="win95"] .holdings-toggle:active {
+            box-shadow:
+                inset 1px 1px #0a0a0a, inset -1px -1px #ffffff,
+                inset 2px 2px #808080, inset -2px -2px #dfdfdf !important;
+        }
+        /* Selected span/mode toggle reads as a pressed-in button. */
+        [data-theme="win95"] .span-btn.active,
+        [data-theme="win95"] .ts-span-btn.active,
+        [data-theme="win95"] .holdings-toggle.active {
+            background: #c0c0c0 !important;
+            color: #000000 !important;
+            box-shadow: inset 1px 1px #808080, inset -1px -1px #ffffff !important;
+        }
+
+        /* Sunken text fields. */
+        [data-theme="win95"] input[type="text"],
+        [data-theme="win95"] input[type="number"],
+        [data-theme="win95"] input[type="date"],
+        [data-theme="win95"] select:not(#themeSelect),
+        [data-theme="win95"] textarea {
+            background: #ffffff !important;
+            color: #000000 !important;
+            border: none !important;
+            box-shadow:
+                inset -1px -1px #ffffff, inset 1px 1px #808080,
+                inset -2px -2px #dfdfdf, inset 2px 2px #0a0a0a !important;
+        }
+
+        /* Loading modal uses a literal bg-white — re-skin it to a silver panel. */
+        [data-theme="win95"] #loadingOverlay > div {
+            background: #c0c0c0;
+            box-shadow:
+                inset -1px -1px #0a0a0a, inset 1px 1px #ffffff,
+                inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+        }
+
+        /* Retro surfaces for toasts (panel) and tooltips (classic yellow). */
+        [data-theme="win95"] .toast {
+            background: #c0c0c0;
+            box-shadow:
+                inset -1px -1px #0a0a0a, inset 1px 1px #ffffff,
+                inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+        }
+        [data-theme="win95"] #ticker-tooltip,
+        [data-theme="win95"] .mom-tooltip {
+            background: #ffffe1;
+            color: #000000;
+            border: 1px solid #000000;
+            box-shadow: none;
+        }
     </style>
 
 </head>
@@ -349,7 +602,17 @@
         </div>
     </div>
 
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="app-shell max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Decorative window title bar — only visible in the Windows 95 theme. -->
+        <div class="win95-titlebar" aria-hidden="true">
+            <span class="win95-titlebar-title">
+                <img src="/static/favicon.ico" alt="" width="16" height="16" style="image-rendering:pixelated;">
+                こるちゃファンド
+            </span>
+            <span class="win95-titlebar-buttons">
+                <span>_</span><span>□</span><span>✕</span>
+            </span>
+        </div>
         <header class="mb-10 border-b border-da-gray-200 pb-6">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6">
                 <div class="flex items-center gap-5">
@@ -364,6 +627,11 @@
                     </a>
                 </div>
                 <div class="flex items-center gap-3 flex-wrap">
+                    <select id="themeSelect" aria-label="テーマ" title="テーマ切り替え"
+                        class="da-card bg-white px-3 py-2.5 text-sm font-bold text-da-blue-900 cursor-pointer">
+                        <option value="default">🖥 モダン</option>
+                        <option value="win95">🪟 Windows 95</option>
+                    </select>
                     <a href="/status"
                         class="text-da-blue-900 hover:text-da-blue-600 text-base font-medium transition-colors">
                         ステータス
@@ -873,6 +1141,19 @@
                 tip.style.top = (rect.top - 6) + 'px';
                 tip.style.transform = 'translate(-50%, -100%)';
             }
+        })();
+    </script>
+    <script>
+        // Theme switcher — persist the choice and reload so both the
+        // server-rendered markup and the Chart.js canvases re-render themed.
+        (function () {
+            const sel = document.getElementById('themeSelect');
+            if (!sel) return;
+            sel.value = document.documentElement.getAttribute('data-theme') || 'default';
+            sel.addEventListener('change', function () {
+                try { localStorage.setItem('korucha-theme', sel.value); } catch (e) {}
+                location.reload();
+            });
         })();
     </script>
 </body>
