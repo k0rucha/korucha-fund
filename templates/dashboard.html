@@ -48,11 +48,76 @@
         }).format(date).replace(/\//g, '/');
     }
 
-    // Digital Agency inspired palette (Blues + Accents)
-    const chartColors = [
-        '#000060', '#004BB1', '#3E86E8', '#FB5801', '#FFBD44',
-        '#0017C1', '#0061D3', '#A5C9FF', '#FFC700', '#666666',
-    ];
+    // Theme-driven palette (Digital Agency blues by default, VGA 16-colour in win95).
+    const chartColors = window.chartTheme.palette;
+
+    // ── Windows 95 composition: hand-drawn 3D pie ────────────────────
+    // Chart.js can't do 3D or aliased rendering, so under win95 we draw a
+    // chunky Excel-95-style pie: solid VGA fills, 1px black outlines and a
+    // flat darker extruded side, rendered into a tiny buffer and upscaled
+    // with image-rendering:pixelated so the jaggies survive.
+    function shadeColor(hex, factor) {
+        const m = hex.replace('#', '');
+        const r = Math.round(parseInt(m.substring(0, 2), 16) * factor);
+        const g = Math.round(parseInt(m.substring(2, 4), 16) * factor);
+        const b = Math.round(parseInt(m.substring(4, 6), 16) * factor);
+        return 'rgb(' + r + ',' + g + ',' + b + ')';
+    }
+
+    function drawWin95Pie3D(canvas, data, palette) {
+        const values = data.values;
+        const total = values.reduce((a, b) => a + b, 0);
+        const W = 144, H = 120;            // tiny buffer, upscaled by CSS
+        canvas.width = W;
+        canvas.height = H;
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        canvas.style.imageRendering = 'pixelated';
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = false;
+        ctx.clearRect(0, 0, W, H);
+        if (total <= 0) return;
+
+        const cx = W / 2, rx = 60, ry = 33, depth = 16;
+        const cy = (H - depth) / 2;        // centre of the top face
+        ctx.lineWidth = 1;
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#000000';
+
+        // Build slices, starting at 12 o'clock and going clockwise.
+        const slices = [];
+        let a = -Math.PI / 2;
+        for (let i = 0; i < values.length; i++) {
+            if (values[i] <= 0) continue;
+            const end = a + (values[i] / total) * Math.PI * 2;
+            const color = palette[slices.length % palette.length];
+            slices.push({ start: a, end: end, color: color, side: shadeColor(color, 0.55) });
+            a = end;
+        }
+
+        // Pass 1 — extruded side walls. Back walls fall inside the top
+        // ellipse and get painted over in pass 2; only the front rim shows.
+        for (const s of slices) {
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, rx, ry, 0, s.start, s.end);
+            ctx.ellipse(cx, cy + depth, rx, ry, 0, s.end, s.start, true);
+            ctx.closePath();
+            ctx.fillStyle = s.side;
+            ctx.fill();
+            ctx.stroke();
+        }
+
+        // Pass 2 — bright flat top faces.
+        for (const s of slices) {
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.ellipse(cx, cy, rx, ry, 0, s.start, s.end);
+            ctx.closePath();
+            ctx.fillStyle = s.color;
+            ctx.fill();
+            ctx.stroke();
+        }
+    }
 
     // --- Composition Doughnut Chart ---
     fetch('/fragment/composition')
@@ -89,6 +154,11 @@
                     toggleBtn.textContent = expanded ? '折りたたむ' : `もっと見る (+${hiddenCount})`;
                 });
             }
+            if (document.documentElement.getAttribute('data-theme') === 'win95') {
+                // Retro 3D pie instead of the modern doughnut.
+                drawWin95Pie3D(document.getElementById('compositionChart'), data, chartColors);
+                return;
+            }
             new Chart(ctx, {
                 type: 'doughnut',
                 data: {
@@ -96,7 +166,7 @@
                     datasets: [{
                         data: data.values,
                         backgroundColor: chartColors.slice(0, data.labels.length),
-                        borderColor: '#FFFFFF',
+                        borderColor: window.chartTheme.sliceBorder,
                         borderWidth: 2,
                         hoverOffset: 12,
                     }],
@@ -108,10 +178,10 @@
                     plugins: {
                         legend: { display: false },
                         tooltip: {
-                            backgroundColor: '#FFFFFF',
-                            titleColor: '#333333',
-                            bodyColor: '#666666',
-                            borderColor: '#E2E8F0',
+                            backgroundColor: window.chartTheme.tooltipBg,
+                            titleColor: window.chartTheme.tooltipTitle,
+                            bodyColor: window.chartTheme.tooltipBody,
+                            borderColor: window.chartTheme.tooltipBorder,
                             borderWidth: 1,
                             padding: 12,
                             displayColors: true,
@@ -154,7 +224,7 @@
                         {
                             label: '評価額',
                             data: data.values,
-                            borderColor: '#000060',
+                            borderColor: window.chartTheme.linePrimary,
                             backgroundColor: 'rgba(0, 0, 96, 0.05)',
                             fill: true,
                             tension: 0.2,
@@ -198,17 +268,17 @@
                     interaction: { intersect: false, mode: 'index' },
                     scales: {
                         x: {
-                            ticks: { color: '#666666', font: { size: 12, family: 'Inter' } },
+                            ticks: { color: window.chartTheme.tick, font: { size: 12, family: 'Inter' } },
                             grid: { display: false },
                         },
                         y: {
                             position: 'left',
                             ticks: {
-                                color: '#666666',
+                                color: window.chartTheme.tick,
                                 font: { size: 12, family: 'Inter' },
                                 callback: v => '¥' + v.toLocaleString(),
                             },
-                            grid: { color: '#F0F0F0' },
+                            grid: { color: window.chartTheme.grid },
                         },
                         y1: {
                             position: 'right',
@@ -223,16 +293,16 @@
                     plugins: {
                         legend: {
                             labels: {
-                                color: '#333333',
+                                color: window.chartTheme.legend,
                                 font: { size: 13, family: 'Inter', weight: '500' },
                                 usePointStyle: true,
                             },
                         },
                         tooltip: {
-                            backgroundColor: '#FFFFFF',
-                            titleColor: '#333333',
-                            bodyColor: '#666666',
-                            borderColor: '#E2E8F0',
+                            backgroundColor: window.chartTheme.tooltipBg,
+                            titleColor: window.chartTheme.tooltipTitle,
+                            bodyColor: window.chartTheme.tooltipBody,
+                            borderColor: window.chartTheme.tooltipBorder,
                             borderWidth: 1,
                             padding: 12,
                             boxPadding: 6,

@@ -182,7 +182,7 @@
                     {
                         label: '評価額',
                         data: sliced.v,
-                        borderColor: '#000060',
+                        borderColor: window.chartTheme.linePrimary,
                         backgroundColor: 'rgba(0, 0, 96, 0.05)',
                         fill: true,
                         tension: 0.2,
@@ -207,17 +207,17 @@
                 interaction: { intersect: false, mode: 'index' },
                 scales: {
                     x: {
-                        ticks: { color: '#666666', font: { size: 11, family: 'Inter' } },
+                        ticks: { color: window.chartTheme.tick, font: { size: 11, family: 'Inter' } },
                         grid: { display: false },
                     },
                     y: {
                         position: 'left',
                         ticks: {
-                            color: '#666666',
+                            color: window.chartTheme.tick,
                             font: { size: 11, family: 'Inter' },
                             callback: v => '¥' + v.toLocaleString(),
                         },
-                        grid: { color: '#F0F0F0' },
+                        grid: { color: window.chartTheme.grid },
                     },
                     y1: {
                         position: 'right',
@@ -232,16 +232,16 @@
                 plugins: {
                     legend: {
                         labels: {
-                            color: '#333333',
+                            color: window.chartTheme.legend,
                             font: { size: 12, family: 'Inter', weight: '500' },
                             usePointStyle: true,
                         },
                     },
                     tooltip: {
-                        backgroundColor: '#FFFFFF',
-                        titleColor: '#333333',
-                        bodyColor: '#666666',
-                        borderColor: '#E2E8F0',
+                        backgroundColor: window.chartTheme.tooltipBg,
+                        titleColor: window.chartTheme.tooltipTitle,
+                        bodyColor: window.chartTheme.tooltipBody,
+                        borderColor: window.chartTheme.tooltipBorder,
                         borderWidth: 1,
                         padding: 10,
                         callbacks: {

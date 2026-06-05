@@ -7,6 +7,7 @@
 - **フロントページ** — 保有銘柄・損益・時系列グラフを公開表示
 - **管理画面** (`/admin`) — 取引履歴の追加・削除・CSV インポート/エクスポート（Basic Auth 保護）
 - **シェアカード** — ポートフォリオや個別銘柄のスナップショットを OGP 付きで共有
+- **テーマ切り替え** — ヘッダーから「モダン」と「Windows 95 風」レトロUIを切り替え（選択は `localStorage` に保存）
 - **自動バッチ** — JST 23:00 に Yahoo Finance から終値を取得してスナップショットを更新
 
 ## スタック
@@ -15,7 +16,7 @@
 |---|---|
 | サーバー | Rust / [Axum](https://github.com/tokio-rs/axum) |
 | テンプレート | [Askama](https://github.com/djc/askama) |
-| フロントエンド | [HTMX](https://htmx.org) + [Chart.js](https://www.chartjs.org) + [Tailwind CSS](https://tailwindcss.com) |
+| フロントエンド | [HTMX](https://htmx.org) + [Chart.js](https://www.chartjs.org) + [Tailwind CSS](https://tailwindcss.com)（`data-theme` + CSS 変数でテーマ切替） |
 | DB | SQLite ([sqlx](https://github.com/launchbadge/sqlx)) |
 | 株価データ | [yahoo_finance_api](https://crates.io/crates/yahoo_finance_api) |
 | スケジューラ | [tokio-cron-scheduler](https://crates.io/crates/tokio-cron-scheduler) |
