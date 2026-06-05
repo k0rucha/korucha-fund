@@ -37,7 +37,7 @@ pub async fn list_transactions(pool: &SqlitePool) -> Result<Vec<Transaction>, sq
 }
 
 pub async fn create_transaction(pool: &SqlitePool, data: CreateTransaction) -> Result<i64, sqlx::Error> {
-    let result = sqlx::query!(
+    Ok(sqlx::query!(
         r#"
         INSERT INTO transactions (symbol, txn_type, quantity, price, currency, fee, txn_date, fx_rate_to_jpy, notes)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -53,15 +53,13 @@ pub async fn create_transaction(pool: &SqlitePool, data: CreateTransaction) -> R
         data.notes
     )
     .execute(pool)
-    .await?;
-
-    Ok(result.last_insert_rowid())
+    .await?
+    .last_insert_rowid())
 }
 
 pub async fn delete_transaction(pool: &SqlitePool, id: i64) -> Result<u64, sqlx::Error> {
-    let result = sqlx::query!("DELETE FROM transactions WHERE id = ?", id)
+    Ok(sqlx::query!("DELETE FROM transactions WHERE id = ?", id)
         .execute(pool)
-        .await?;
-    
-    Ok(result.rows_affected())
+        .await?
+        .rows_affected())
 }
