@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 // Basic-auth gate for the admin UI + admin APIs (ADMIN_USER / ADMIN_PASS).
+// Next 16 "proxy" convention (formerly the `middleware` file).
 export const config = {
   matcher: ["/admin", "/admin/:path*", "/api/admin/:path*"],
 };
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const user = process.env.ADMIN_USER;
   const pass = process.env.ADMIN_PASS;
   const header = req.headers.get("authorization");
