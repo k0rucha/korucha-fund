@@ -1,6 +1,7 @@
 mod auth;
 mod config;
 mod error;
+mod template_response;
 pub mod db;
 pub mod handlers;
 pub mod services;
