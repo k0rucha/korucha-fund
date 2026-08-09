@@ -10,6 +10,7 @@ use std::collections::HashMap;
 
 use crate::AppState;
 use crate::db::{transactions::{self, Transaction, CreateTransaction}, symbols};
+use crate::template_response::TemplateResponse;
 
 #[derive(Template)]
 #[template(path = "admin.html")]
@@ -29,7 +30,7 @@ pub async fn admin_index(State(state): State<AppState>) -> Result<impl IntoRespo
         .into_iter()
         .filter_map(|s| s.name.map(|n| (s.symbol, n)))
         .collect();
-    Ok(AdminTemplate { transactions: txs, symbol_names })
+    Ok(TemplateResponse(AdminTemplate { transactions: txs, symbol_names }))
 }
 
 #[derive(Deserialize)]
