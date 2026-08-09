@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use crate::AppState;
 use crate::db::{transactions, prices, fx, symbols, snapshots};
 use crate::services::portfolio;
+use crate::template_response::TemplateResponse;
 use crate::util::{format_with_commas, signed_pct, jst_today};
 
 pub struct HoldingView {
@@ -272,7 +273,7 @@ pub async fn dashboard_index(State(state): State<AppState>) -> Result<impl IntoR
 
     let cumulative_pnl_jpy_num = realized_pnl_jpy_num + total_unrealized_pnl_jpy;
 
-    Ok(DashboardTemplate {
+    Ok(TemplateResponse(DashboardTemplate {
         holdings: holding_views,
         total_cost_jpy: format_with_commas(total_cost_jpy),
         total_value_jpy: format_with_commas(total_value_jpy),
@@ -308,5 +309,5 @@ pub async fn dashboard_index(State(state): State<AppState>) -> Result<impl IntoR
         realized_pnl_jpy_num,
         cumulative_pnl_jpy: format_with_commas(cumulative_pnl_jpy_num.abs()),
         cumulative_pnl_jpy_num,
-    })
+    }))
 }
