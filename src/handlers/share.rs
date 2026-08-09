@@ -11,6 +11,7 @@ use std::collections::HashMap;
 use crate::AppState;
 use crate::db::{transactions, prices, fx, symbols, snapshots, share_cards};
 use crate::services::portfolio;
+use crate::template_response::TemplateResponse;
 use crate::util::{format_with_commas, signed_with_commas, signed_pct};
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -362,5 +363,5 @@ pub async fn view_share_card(
         og_description,
     };
 
-    Ok(tmpl)
+    Ok(TemplateResponse(tmpl))
 }
