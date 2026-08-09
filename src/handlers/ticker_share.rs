@@ -16,6 +16,7 @@ use crate::AppState;
 use crate::db::{prices, fx, symbols, transactions, ticker_share_cards, api_stats};
 use crate::error::{AppError, AppResult};
 use crate::services::{portfolio, yfinance};
+use crate::template_response::TemplateResponse;
 use crate::util::{format_with_commas, signed_pct, jst, jst_today};
 use crate::handlers::share::{base_url, generate_id, normalize_span_str};
 
@@ -371,7 +372,7 @@ pub async fn view_ticker_share_card(
         og_description,
     };
 
-    Ok(tmpl)
+    Ok(TemplateResponse(tmpl))
 }
 
 // Small extension trait to keep the conditional-format logic readable above.
