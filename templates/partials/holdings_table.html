@@ -1,36 +1,49 @@
 <div class="da-card overflow-hidden">
-    <div class="px-6 py-5 border-b border-da-gray-200 bg-da-gray-50/50 flex items-center justify-between">
-        <h3 class="text-base font-bold text-da-gray-800 tracking-wide">銘柄一覧</h3>
-        <div class="flex gap-1" id="holdings-mode-toggle">
-            <button class="holdings-toggle px-3 py-1 text-sm font-medium rounded border transition-colors active" data-mode="cumulative">累計</button>
-            <button class="holdings-toggle px-3 py-1 text-sm font-medium rounded border transition-colors" data-mode="dod">前日比</button>
-            <button class="holdings-toggle px-3 py-1 text-sm font-medium rounded border transition-colors" data-mode="mom">先月比</button>
+    <div class="px-5 sm:px-6 py-5 border-b border-da-gray-200 bg-da-gray-50/50 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <h3 class="text-base font-bold text-da-gray-800 tracking-wide">保有銘柄</h3>
+            <p class="text-xs text-da-gray-400 mt-1">評価額の高い順に表示</p>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
+            <div class="flex gap-1" id="holdings-mode-toggle" role="group" aria-label="損益の比較期間">
+                <button type="button" class="holdings-toggle flex-1 sm:flex-none px-3 py-1.5 text-sm font-medium rounded border transition-colors active" data-mode="cumulative" aria-pressed="true">累計</button>
+                <button type="button" class="holdings-toggle flex-1 sm:flex-none px-3 py-1.5 text-sm font-medium rounded border transition-colors" data-mode="dod" aria-pressed="false">前日比</button>
+                <button type="button" class="holdings-toggle flex-1 sm:flex-none px-3 py-1.5 text-sm font-medium rounded border transition-colors" data-mode="mom" aria-pressed="false">先月比</button>
+            </div>
+            <select id="holdings-sort-select" aria-label="銘柄の並び順"
+                class="md:hidden da-card bg-white px-3 py-2 text-sm font-medium text-da-gray-600">
+                <option value="value:desc">評価額が高い順</option>
+                <option value="pnl:desc">損益額が高い順</option>
+                <option value="pnl-pct:desc">損益率が高い順</option>
+                <option value="quantity:desc">保有数が多い順</option>
+            </select>
         </div>
     </div>
-    <div class="overflow-x-auto">
+    <div class="holdings-table-frame overflow-x-auto">
         <table id="holdings-sortable" class="min-w-full text-base">
             <thead>
                 <tr class="border-b border-da-gray-200 bg-da-gray-50/30">
                     <th class="px-6 py-4 text-left text-sm font-bold text-da-gray-600 uppercase tracking-wider">ティッカー</th>
                     <th class="px-6 py-4 text-left text-sm font-bold text-da-gray-600 uppercase tracking-wider">銘柄名</th>
-                    <th class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="quantity">保有数<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
-                    <th class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="avg-cost">取得単価<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
-                    <th class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="cur-price">現在価格<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
-                    <th class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="value">評価額 (¥)<span class="sort-arrow ml-1 text-da-blue-900">▼</span></th>
-                    <th class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="pnl" id="th-pnl">損益 (¥)<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
-                    <th class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="pnl-pct" id="th-pnl-pct">損益率<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
+                    <th tabindex="0" aria-sort="none" class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="quantity">保有数<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
+                    <th tabindex="0" aria-sort="none" class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="avg-cost">取得単価<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
+                    <th tabindex="0" aria-sort="none" class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="cur-price">現在価格<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
+                    <th tabindex="0" aria-sort="descending" class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="value">評価額 (¥)<span class="sort-arrow ml-1 text-da-blue-900">▼</span></th>
+                    <th tabindex="0" aria-sort="none" class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="pnl" id="th-pnl">損益 (¥)<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
+                    <th tabindex="0" aria-sort="none" class="px-6 py-4 text-right text-sm font-bold text-da-gray-600 uppercase tracking-wider sortable cursor-pointer select-none hover:bg-da-blue-50" data-col="pnl-pct" id="th-pnl-pct">損益率<span class="sort-arrow ml-1 text-da-gray-400"></span></th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-da-gray-200">
                 {% for h in holdings %}
                 <tr class="table-row-hover transition-colors">
-                    <td class="px-6 py-4 whitespace-nowrap font-bold text-da-blue-1200 text-base">{% if !h.name.is_empty() %}<span class="ticker-symbol-cell" data-ticker-name="{{ h.name }}">{{ h.symbol }}</span>{% else %}{{ h.symbol }}{% endif %}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-da-gray-700 text-sm">{% if h.name.is_empty() %}<span class="italic text-da-gray-400">—</span>{% else %}{{ h.name }}{% endif %}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right text-da-gray-700 font-medium" data-sort="{{ h.quantity_num }}">{{ h.quantity }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right text-da-gray-700" data-sort="{{ h.average_cost_native_num }}">{{ h.average_cost_native }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right text-da-gray-700" data-sort="{{ h.current_price_native_num }}">{{ h.current_price_native }}</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-right text-da-gray-800 font-bold" data-sort="{{ h.current_value_jpy_num }}">¥{{ h.current_value_jpy }}</td>
+                    <td class="holding-symbol px-6 py-4 whitespace-nowrap font-bold text-da-blue-1200 text-base">{% if !h.name.is_empty() %}<span class="ticker-symbol-cell" data-ticker-name="{{ h.name }}">{{ h.symbol }}</span>{% else %}{{ h.symbol }}{% endif %}</td>
+                    <td class="holding-name px-6 py-4 whitespace-nowrap text-da-gray-700 text-sm">{% if h.name.is_empty() %}<span class="italic text-da-gray-400">—</span>{% else %}{{ h.name }}{% endif %}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-da-gray-700 font-medium" data-label="保有数" data-sort="{{ h.quantity_num }}">{{ h.quantity }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-da-gray-700" data-label="取得単価" data-sort="{{ h.average_cost_native_num }}">{{ h.average_cost_native }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-da-gray-700" data-label="現在価格" data-sort="{{ h.current_price_native_num }}">{{ h.current_price_native }}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-right text-da-gray-800 font-bold" data-label="評価額" data-sort="{{ h.current_value_jpy_num }}">¥{{ h.current_value_jpy }}</td>
                     <td class="holdings-pnl-cell px-6 py-4 whitespace-nowrap text-right font-bold {% if h.unrealized_pnl_jpy_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}"
+                        data-label="損益額"
                         data-sort="{{ h.unrealized_pnl_jpy_num }}"
                         data-cumulative-val="{{ h.unrealized_pnl_jpy_num }}"
                         data-cumulative-str="{% if h.unrealized_pnl_jpy_num >= 0.0 %}+{% else %}-{% endif %}¥{{ h.unrealized_pnl_jpy }}"
@@ -43,6 +56,7 @@
                         {% if h.unrealized_pnl_jpy_num >= 0.0 %}+{% else %}-{% endif %}¥{{ h.unrealized_pnl_jpy }}
                     </td>
                     <td class="holdings-pct-cell px-6 py-4 whitespace-nowrap text-right font-bold {% if h.unrealized_pnl_pct_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}"
+                        data-label="損益率"
                         data-sort="{{ h.unrealized_pnl_pct_num }}"
                         data-cumulative-val="{{ h.unrealized_pnl_pct_num }}"
                         data-cumulative-str="{% if h.unrealized_pnl_pct_num >= 0.0 %}+{% endif %}{{ h.unrealized_pnl_pct }}%"
@@ -73,6 +87,7 @@
     if (!table) return;
     const headers = table.querySelectorAll('th.sortable');
     const tbody = table.querySelector('tbody');
+    const sortSelect = document.getElementById('holdings-sort-select');
 
     // Default state: value column descending (matches server-side default order).
     let currentCol = 'value';
@@ -108,12 +123,19 @@
                 arrow.textContent = dir === 'asc' ? '▲' : '▼';
                 arrow.classList.remove('text-da-gray-400');
                 arrow.classList.add('text-da-blue-900');
+                h.setAttribute('aria-sort', dir === 'asc' ? 'ascending' : 'descending');
             } else {
                 arrow.textContent = '';
                 arrow.classList.add('text-da-gray-400');
                 arrow.classList.remove('text-da-blue-900');
+                h.setAttribute('aria-sort', 'none');
             }
         });
+
+        const selectValue = `${col}:${dir}`;
+        if (sortSelect && Array.from(sortSelect.options).some(option => option.value === selectValue)) {
+            sortSelect.value = selectValue;
+        }
     }
 
     function applyMode(mode) {
@@ -174,9 +196,11 @@
             toggleBtns.forEach(b => {
                 b.classList.remove('active', 'bg-da-blue-900', 'text-white', 'border-da-blue-900');
                 b.classList.add('border-da-gray-300', 'text-da-gray-600', 'hover:bg-da-gray-50');
+                b.setAttribute('aria-pressed', 'false');
             });
             btn.classList.add('active', 'bg-da-blue-900', 'text-white', 'border-da-blue-900');
             btn.classList.remove('border-da-gray-300', 'text-da-gray-600', 'hover:bg-da-gray-50');
+            btn.setAttribute('aria-pressed', 'true');
             applyMode(btn.dataset.mode);
         });
     });
@@ -202,6 +226,19 @@
             }
             sortBy(currentCol, currentDir);
         });
+        h.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                h.click();
+            }
+        });
     });
+
+    if (sortSelect) {
+        sortSelect.addEventListener('change', () => {
+            [currentCol, currentDir] = sortSelect.value.split(':');
+            sortBy(currentCol, currentDir);
+        });
+    }
 })();
 </script>

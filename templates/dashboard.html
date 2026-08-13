@@ -3,32 +3,312 @@
 {% block title %}こるちゃファンド ダッシュボード{% endblock %}
 {% block description %}こるちゃの個人株式ポートフォリオを可視化するダッシュボード。総評価額・損益・銘柄構成比・時系列推移を一覧できます。{% endblock %}
 
+{% block extra_head %}
+<style>
+    .da-card.dashboard-hero {
+        background:
+            radial-gradient(circle at 92% 18%, rgba(255, 255, 255, 0.2), transparent 24%),
+            linear-gradient(135deg, #000060 0%, #0017c1 58%, #004bb1 100%);
+        border: 0;
+        color: #fff;
+        box-shadow: 0 18px 40px rgba(0, 23, 193, 0.18);
+    }
+
+    .dashboard-hero::after {
+        content: "";
+        position: absolute;
+        width: 220px;
+        height: 220px;
+        right: -90px;
+        bottom: -145px;
+        border: 36px solid rgba(255, 255, 255, 0.08);
+        border-radius: 9999px;
+        pointer-events: none;
+    }
+
+    .dashboard-hero > * {
+        position: relative;
+        z-index: 1;
+    }
+
+    .snapshot-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 6px 10px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 9999px;
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.86);
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+    }
+
+    .snapshot-badge::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 9999px;
+        background: #67e8f9;
+        box-shadow: 0 0 0 4px rgba(103, 232, 249, 0.14);
+    }
+
+    .performance-stat {
+        min-width: 0;
+        padding: 12px 14px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.08);
+    }
+
+    .metric-card {
+        position: relative;
+        overflow: hidden;
+    }
+
+    .metric-card::after {
+        content: "";
+        position: absolute;
+        inset: auto -22px -28px auto;
+        width: 72px;
+        height: 72px;
+        border: 14px solid rgb(var(--da-blue-50));
+        border-radius: 9999px;
+        opacity: 0.7;
+        pointer-events: none;
+    }
+
+    .metric-value {
+        font-size: clamp(1.35rem, 2vw, 1.8rem);
+    }
+
+    .chart-range-btn {
+        padding: 7px 10px;
+        border-radius: 6px;
+        color: rgb(var(--da-gray-600));
+        font-size: 12px;
+        font-weight: 700;
+        line-height: 1;
+        transition: color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .chart-range-btn:hover {
+        color: rgb(var(--da-blue-900));
+    }
+
+    .chart-range-btn.active {
+        background: var(--surface);
+        color: rgb(var(--da-blue-900));
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .composition-center {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+    }
+
+    [data-theme="win95"] .da-card.dashboard-hero {
+        background: #c0c0c0;
+        color: #000;
+        border: 0;
+        box-shadow:
+            inset -1px -1px #0a0a0a, inset 1px 1px #ffffff,
+            inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+    }
+
+    [data-theme="win95"] .dashboard-hero::after,
+    [data-theme="win95"] .snapshot-badge::before,
+    [data-theme="win95"] .metric-card::after,
+    [data-theme="win95"] .composition-center {
+        display: none;
+    }
+
+    [data-theme="win95"] .dashboard-hero .hero-muted,
+    [data-theme="win95"] .dashboard-hero .hero-value,
+    [data-theme="win95"] .dashboard-hero .hero-change {
+        color: #000 !important;
+    }
+
+    [data-theme="win95"] .snapshot-badge,
+    [data-theme="win95"] .performance-stat {
+        background: #c0c0c0;
+        color: #000;
+        border: 0;
+        box-shadow: inset 1px 1px #808080, inset -1px -1px #ffffff;
+    }
+
+    [data-theme="win95"] .chart-range-btn {
+        border: 0;
+        border-radius: 0;
+        background: #c0c0c0;
+        color: #000;
+        box-shadow:
+            inset -1px -1px #0a0a0a, inset 1px 1px #ffffff,
+            inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+    }
+
+    [data-theme="win95"] .chart-range-btn.active {
+        box-shadow: inset 1px 1px #808080, inset -1px -1px #ffffff;
+    }
+
+    @media (max-width: 767px) {
+        .holdings-table-frame {
+            overflow: visible;
+        }
+
+        #holdings-sortable {
+            display: block;
+            min-width: 0;
+        }
+
+        #holdings-sortable thead {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
+        #holdings-sortable tbody {
+            display: grid;
+            gap: 12px;
+            padding: 12px;
+        }
+
+        #holdings-sortable tbody tr {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            padding: 14px;
+            border: 1px solid var(--surface-border);
+            border-radius: var(--surface-radius);
+            background: var(--surface);
+            box-shadow: var(--surface-shadow);
+        }
+
+        #holdings-sortable tbody td {
+            min-width: 0;
+            padding: 9px 4px;
+            white-space: normal;
+        }
+
+        #holdings-sortable tbody td[data-label] {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        #holdings-sortable tbody td[data-label]::before {
+            content: attr(data-label);
+            color: rgb(var(--da-gray-400));
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+        }
+
+        #holdings-sortable .holding-symbol {
+            grid-column: 1;
+            align-self: center;
+            padding-bottom: 12px;
+            font-size: 1.1rem;
+        }
+
+        #holdings-sortable .holding-name {
+            grid-column: 2;
+            align-self: center;
+            padding-bottom: 12px;
+            overflow: hidden;
+            text-align: right;
+            text-overflow: ellipsis;
+        }
+
+        #holdings-sortable .holdings-pnl-cell,
+        #holdings-sortable .holdings-pct-cell {
+            padding-top: 12px;
+            border-top: 1px solid var(--surface-border);
+        }
+
+        [data-theme="win95"] #holdings-sortable tbody tr {
+            border: 0;
+            box-shadow: inset 1px 1px #808080, inset -1px -1px #ffffff;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .fade-in,
+        .chart-range-btn {
+            animation: none !important;
+            transition: none !important;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="fade-in">
+    <div class="mb-6 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+            <p class="text-[11px] font-bold tracking-[0.2em] text-da-blue-600 uppercase mb-2">Portfolio overview</p>
+            <h2 class="text-2xl sm:text-3xl font-black tracking-tight text-da-gray-800">資産の現在地</h2>
+        </div>
+        <p class="inline-flex items-center gap-2 self-start sm:self-auto text-sm font-medium text-da-gray-600">
+            <span class="inline-block w-2 h-2 rounded-full bg-emerald-500" aria-hidden="true"></span>
+            {{ holdings.len() }} 銘柄を保有中
+        </p>
+    </div>
+
     <!-- KPI Tiles -->
-    <div id="kpi-tiles" class="mb-10">
+    <div id="kpi-tiles" class="mb-8">
         {% include "partials/kpi_tiles.html" %}
     </div>
 
     <!-- Charts Row -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-10">
-        <div class="da-card p-6 lg:col-span-1">
-            <h3 class="text-base font-bold text-da-gray-800 tracking-wide mb-6">構成比</h3>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <section class="da-card p-5 sm:p-6 lg:col-span-2">
+            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-5">
+                <div>
+                    <h3 class="text-base font-bold text-da-gray-800 tracking-wide">評価額の推移</h3>
+                    <p class="text-xs text-da-gray-400 mt-1">評価額・投資元本・損益を比較</p>
+                </div>
+                <div id="timeseriesRange" class="inline-flex self-start rounded-lg bg-da-gray-50 p-1" role="group" aria-label="チャートの表示期間">
+                    <button type="button" class="chart-range-btn" data-days="30" aria-pressed="false">1か月</button>
+                    <button type="button" class="chart-range-btn" data-days="90" aria-pressed="false">3か月</button>
+                    <button type="button" class="chart-range-btn" data-days="365" aria-pressed="false">1年</button>
+                    <button type="button" class="chart-range-btn active" data-days="all" aria-pressed="true">全期間</button>
+                </div>
+            </div>
+            <div class="relative" style="height: 340px;">
+                <canvas id="timeseriesChart" role="img" aria-label="ポートフォリオの評価額、投資元本、損益の推移"></canvas>
+            </div>
+        </section>
+
+        <section class="da-card p-5 sm:p-6 lg:col-span-1">
+            <div class="mb-5">
+                <h3 class="text-base font-bold text-da-gray-800 tracking-wide">資産構成</h3>
+                <p class="text-xs text-da-gray-400 mt-1">現在の評価額ベース</p>
+            </div>
             <div class="relative mx-auto" style="height: 240px; max-width: 280px;">
-                <canvas id="compositionChart"></canvas>
+                <canvas id="compositionChart" role="img" aria-label="銘柄別の資産構成比"></canvas>
+                <div class="composition-center" aria-hidden="true">
+                    <strong id="compositionCount" class="text-3xl font-black text-da-blue-1200 tabular-nums">—</strong>
+                    <span class="text-[10px] font-bold tracking-widest text-da-gray-400 uppercase mt-1">Holdings</span>
+                </div>
             </div>
             <ul id="compositionLegend" class="mt-6 space-y-2 text-sm"></ul>
             <button id="compositionLegendToggle" type="button"
                 class="hidden mt-3 text-xs font-medium text-da-blue-900 hover:text-da-blue-600 transition-colors">
                 もっと見る
             </button>
-        </div>
-        <div class="da-card p-6 lg:col-span-2">
-            <h3 class="text-base font-bold text-da-gray-800 tracking-wide mb-6">評価額の推移</h3>
-            <div class="relative" style="height: 340px;">
-                <canvas id="timeseriesChart"></canvas>
-            </div>
-        </div>
+        </section>
     </div>
 
     <!-- Holdings Table -->
@@ -127,6 +407,7 @@
             const legendEl = document.getElementById('compositionLegend');
             const toggleBtn = document.getElementById('compositionLegendToggle');
             const total = data.values.reduce((a, b) => a + b, 0);
+            document.getElementById('compositionCount').textContent = data.labels.length;
             const COLLAPSED_COUNT = 5;
             legendEl.innerHTML = data.labels.map((label, i) => {
                 const color = chartColors[i % chartColors.length];
@@ -174,6 +455,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    animation: false,
                     cutout: '70%',
                     plugins: {
                         legend: { display: false },
@@ -214,9 +496,10 @@
                 ctx.fillStyle = '#999999';
                 ctx.textAlign = 'center';
                 ctx.fillText('データがまだありません', ctx.canvas.width / 2, ctx.canvas.height / 2);
+                document.querySelectorAll('#timeseriesRange button').forEach(button => button.disabled = true);
                 return;
             }
-            new Chart(ctx, {
+            const timeseriesChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: data.dates.map(d => formatDateJST(d)),
@@ -265,6 +548,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    animation: false,
                     interaction: { intersect: false, mode: 'index' },
                     scales: {
                         x: {
@@ -314,6 +598,34 @@
                         },
                     },
                 },
+            });
+
+            const rangeButtons = document.querySelectorAll('#timeseriesRange button');
+            rangeButtons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const days = button.dataset.days;
+                    let start = 0;
+
+                    if (days !== 'all') {
+                        const cutoff = new Date(data.dates[data.dates.length - 1] + 'T00:00:00Z');
+                        cutoff.setUTCDate(cutoff.getUTCDate() - Number(days) + 1);
+                        const cutoffDate = cutoff.toISOString().slice(0, 10);
+                        const firstMatch = data.dates.findIndex(date => date >= cutoffDate);
+                        start = firstMatch < 0 ? data.dates.length - 1 : firstMatch;
+                    }
+
+                    timeseriesChart.data.labels = data.dates.slice(start).map(formatDateJST);
+                    timeseriesChart.data.datasets[0].data = data.values.slice(start);
+                    timeseriesChart.data.datasets[1].data = data.costs.slice(start);
+                    timeseriesChart.data.datasets[2].data = data.pnls.slice(start);
+                    timeseriesChart.update('none');
+
+                    rangeButtons.forEach(item => {
+                        const active = item === button;
+                        item.classList.toggle('active', active);
+                        item.setAttribute('aria-pressed', String(active));
+                    });
+                });
             });
         });
 </script>
