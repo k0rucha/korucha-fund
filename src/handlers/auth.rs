@@ -6,7 +6,7 @@ use axum::{
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
-use crate::AppState;
+use crate::handlers::AppState;
 
 pub async fn basic_auth(
     State(state): State<AppState>,

@@ -84,13 +84,19 @@ cargo sqlx prepare
 
 ```
 Browser (HTMX + Chart.js + Tailwind CSS)
-    ↓ HTML / JSON fragments
-Axum (src/main.rs)
-    ├── handlers/    HTTP ハンドラ
-    ├── services/    ビジネスロジック・スケジューラ
-    └── db/          SQLite クエリ (sqlx)
-SQLite  ←→  Yahoo Finance API
+    ↓ HTML / JSON
+handlers/              Axum・Askama・HTTP 入出力
+    ↓
+services/              korucha-fund のユースケース
+    ├──→ domain/       取引・保有・損益の純粋な計算
+    ├──→ db/ ──→ domain/   SQLite (SQLx) と行型変換
+    └──→ clients/      Yahoo Finance
 ```
+
+- `domain` は Axum・SQLx・Yahoo Finance に依存しない。
+- `services` は具体的な `db` / `clients` を直接使う。このアプリに実装は一つしかないため、repository trait や DI コンテナは置かない。
+- `handlers` は HTTP の抽出・レスポンス・表示用フォーマットを担当し、複数のデータ取得や更新を伴う処理は `services` に委譲する。
+- `main.rs` は設定、DB 接続、バックグラウンド処理、HTTP サーバーを組み立てる。
 
 - `transactions` テーブルが唯一の真実。保有・損益は毎回そこから導出する。
 - `price_cache` / `fx_cache` は外部 API キャッシュ（消えても再取得可）。

@@ -1,5 +1,5 @@
-use sqlx::{SqlitePool, FromRow};
 use chrono::NaiveDate;
+use sqlx::{FromRow, SqlitePool};
 
 #[derive(Debug, FromRow)]
 pub struct PriceCache {
@@ -14,10 +14,31 @@ pub async fn get_latest_prices(pool: &SqlitePool) -> Result<Vec<PriceCache>, sql
         SELECT symbol, date, close_price
         FROM price_cache
         WHERE date = (SELECT MAX(date) FROM price_cache p2 WHERE p2.symbol = price_cache.symbol)
-        "#
+        "#,
     )
     .fetch_all(pool)
     .await
+}
+
+pub async fn upsert_price(
+    pool: &SqlitePool,
+    symbol: &str,
+    date: NaiveDate,
+    close_price: f64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO price_cache (symbol, date, close_price)
+        VALUES (?, ?, ?)
+        ON CONFLICT(symbol, date) DO UPDATE SET close_price = excluded.close_price
+        "#,
+    )
+    .bind(symbol)
+    .bind(date)
+    .bind(close_price)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 pub async fn bulk_insert_prices(
@@ -34,7 +55,7 @@ pub async fn bulk_insert_prices(
     let mut inserted = 0usize;
     for (date, close) in rows {
         let res = sqlx::query(
-            "INSERT OR IGNORE INTO price_cache (symbol, date, close_price) VALUES (?, ?, ?)"
+            "INSERT OR IGNORE INTO price_cache (symbol, date, close_price) VALUES (?, ?, ?)",
         )
         .bind(symbol)
         .bind(date)
@@ -69,13 +90,12 @@ pub async fn count_history_since(
     symbol: &str,
     since: NaiveDate,
 ) -> Result<i64, sqlx::Error> {
-    let row: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM price_cache WHERE symbol = ? AND date >= ?"
-    )
-    .bind(symbol)
-    .bind(since)
-    .fetch_one(pool)
-    .await?;
+    let row: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM price_cache WHERE symbol = ? AND date >= ?")
+            .bind(symbol)
+            .bind(since)
+            .fetch_one(pool)
+            .await?;
     Ok(row.0)
 }
 

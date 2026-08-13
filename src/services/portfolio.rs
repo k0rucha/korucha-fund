@@ -1,163 +1,55 @@
 use std::collections::HashMap;
-use chrono::NaiveDate;
-use crate::db::transactions::Transaction;
 
-#[derive(Debug, Clone)]
-pub struct Holding {
-    pub symbol: String,
-    pub name: Option<String>,
-    pub currency: String,
-    pub quantity: f64,
-    pub average_cost_native: f64,
-    pub total_cost_jpy: f64,
+use sqlx::SqlitePool;
+
+use crate::db::{fx, prices, symbols, transactions};
+use crate::domain::portfolio::{self, Portfolio, PortfolioAnalysis};
+
+pub(crate) const DISPLAY_USD_JPY_FALLBACK: f64 = 150.0;
+
+pub struct DisplayPortfolio {
+    pub portfolio: Portfolio,
+    pub symbol_names: HashMap<String, String>,
+    pub usd_jpy: f64,
 }
 
-pub fn calculate_holdings(transactions: &[Transaction]) -> Vec<Holding> {
-    let mut holdings_map: HashMap<String, Holding> = HashMap::new();
-
-    // Transactions are fetched in DESC order, we need to process them in ASC order
-    // to calculate cost basis correctly.
-    let mut sorted_txs = transactions.to_vec();
-    sorted_txs.sort_by(|a, b| a.txn_date.cmp(&b.txn_date).then(a.id.cmp(&b.id)));
-
-    for tx in &sorted_txs {
-        let entry = holdings_map.entry(tx.symbol.clone()).or_insert(Holding {
-            symbol: tx.symbol.clone(),
-            name: None,
-            currency: tx.currency.clone(),
-            quantity: 0.0,
-            average_cost_native: 0.0,
-            total_cost_jpy: 0.0,
-        });
-
-        let fx_rate = tx.fx_rate_to_jpy.unwrap_or(1.0);
-        
-        // Fee handling: usually fee increases cost basis on BUY, decreases proceeds on SELL.
-        let native_cost = tx.price * tx.quantity + tx.fee;
-        let jpy_cost = native_cost * fx_rate;
-
-        if tx.txn_type == "BUY" {
-            let new_qty = entry.quantity + tx.quantity;
-            if new_qty > 0.0 {
-                let current_native_value = entry.average_cost_native * entry.quantity;
-                entry.average_cost_native = (current_native_value + native_cost) / new_qty;
-                
-                entry.total_cost_jpy += jpy_cost;
-            }
-            entry.quantity = new_qty;
-        } else if tx.txn_type == "SELL" {
-            let new_qty = entry.quantity - tx.quantity;
-            if new_qty <= 0.0 {
-                entry.quantity = 0.0;
-                entry.average_cost_native = 0.0;
-                entry.total_cost_jpy = 0.0;
-            } else {
-                let proportion = new_qty / entry.quantity;
-                entry.total_cost_jpy *= proportion;
-                entry.quantity = new_qty;
-            }
-        }
-    }
-
-    let mut holdings: Vec<Holding> = holdings_map
-        .into_values()
-        .filter(|h| h.quantity > 0.0)
+pub async fn current_for_display(pool: &SqlitePool) -> sqlx::Result<DisplayPortfolio> {
+    let (analysis, prices, usd_jpy) = load_valuation_inputs(pool).await?;
+    let usd_jpy = usd_jpy.unwrap_or(DISPLAY_USD_JPY_FALLBACK);
+    let portfolio = portfolio::value_portfolio(analysis, &prices, Some(usd_jpy))
+        .expect("display valuation always supplies USDJPY");
+    let symbol_names = symbols::get_symbol_names(pool)
+        .await?
+        .into_iter()
+        .filter_map(|symbol| symbol.name.map(|name| (symbol.symbol, name)))
         .collect();
-    // Stable, deterministic baseline order. Handlers may re-sort for display.
-    holdings.sort_by(|a, b| a.symbol.cmp(&b.symbol));
-    holdings
+
+    Ok(DisplayPortfolio {
+        portfolio,
+        symbol_names,
+        usd_jpy,
+    })
 }
 
-/// 全SELL取引から実現損益 (JPY) を算出して返す。
-/// 加重平均コスト法 — calculate_holdings() と同一ロジックで cost_jpy を追跡し、
-/// 売却時に「売却分に配賦されたコスト」と「売却益」の差を累積する。
-pub fn calculate_realized_pnl(transactions: &[Transaction]) -> f64 {
-    let mut qty_map: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
-    let mut cost_map: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
-    let mut realized_pnl = 0.0;
-
-    let mut sorted_txs = transactions.to_vec();
-    sorted_txs.sort_by(|a, b| a.txn_date.cmp(&b.txn_date).then(a.id.cmp(&b.id)));
-
-    for tx in &sorted_txs {
-        let qty = qty_map.entry(tx.symbol.clone()).or_insert(0.0);
-        let cost_jpy = cost_map.entry(tx.symbol.clone()).or_insert(0.0);
-        let fx_rate = tx.fx_rate_to_jpy.unwrap_or(1.0);
-
-        if tx.txn_type == "BUY" {
-            let native_cost = tx.price * tx.quantity + tx.fee;
-            *cost_jpy += native_cost * fx_rate;
-            *qty += tx.quantity;
-        } else if tx.txn_type == "SELL" && *qty > 0.0 {
-            let sell_qty = tx.quantity.min(*qty);
-            let cost_allocated = *cost_jpy * (sell_qty / *qty);
-            let prorated_fee = if tx.quantity > 0.0 { tx.fee * (sell_qty / tx.quantity) } else { 0.0 };
-            let proceeds_jpy = (tx.price * sell_qty - prorated_fee) * fx_rate;
-            realized_pnl += proceeds_jpy - cost_allocated;
-
-            let new_qty = (*qty - sell_qty).max(0.0);
-            if new_qty <= 0.0 {
-                *qty = 0.0;
-                *cost_jpy = 0.0;
-            } else {
-                *cost_jpy -= cost_allocated;
-                *qty = new_qty;
-            }
-        }
-    }
-
-    realized_pnl
+pub async fn current_for_snapshot(pool: &SqlitePool) -> sqlx::Result<Option<Portfolio>> {
+    let (analysis, prices, usd_jpy) = load_valuation_inputs(pool).await?;
+    Ok(portfolio::value_portfolio(analysis, &prices, usd_jpy))
 }
 
-pub fn calculate_holdings_as_of(transactions: &[Transaction], as_of: NaiveDate) -> Vec<Holding> {
-    let filtered: Vec<Transaction> = transactions
-        .iter()
-        .filter(|t| t.txn_date <= as_of)
-        .cloned()
+pub async fn current_analysis(pool: &SqlitePool) -> sqlx::Result<PortfolioAnalysis> {
+    let transactions = transactions::list_transactions(pool).await?;
+    Ok(portfolio::analyze_transactions(&transactions))
+}
+
+async fn load_valuation_inputs(
+    pool: &SqlitePool,
+) -> sqlx::Result<(PortfolioAnalysis, HashMap<String, f64>, Option<f64>)> {
+    let analysis = current_analysis(pool).await?;
+    let prices = prices::get_latest_prices(pool)
+        .await?
+        .into_iter()
+        .map(|price| (price.symbol, price.close_price))
         .collect();
-    calculate_holdings(&filtered)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::NaiveDate;
-
-    fn make_tx(id: i64, symbol: &str, txn_type: &str, qty: f64, price: f64, currency: &str, fee: f64, fx: Option<f64>) -> Transaction {
-        Transaction {
-            id,
-            symbol: symbol.to_string(),
-            txn_type: txn_type.to_string(),
-            quantity: qty,
-            price,
-            currency: currency.to_string(),
-            fee,
-            txn_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
-            fx_rate_to_jpy: fx,
-            notes: None,
-            created_at: None,
-        }
-    }
-
-    #[test]
-    fn test_calculate_holdings() {
-        let txs = vec![
-            make_tx(1, "AAPL", "BUY", 10.0, 150.0, "USD", 0.0, Some(140.0)),
-            make_tx(2, "AAPL", "BUY", 10.0, 160.0, "USD", 0.0, Some(150.0)),
-            make_tx(3, "7203.T", "BUY", 100.0, 2000.0, "JPY", 100.0, None),
-        ];
-
-        let holdings = calculate_holdings(&txs);
-        assert_eq!(holdings.len(), 2);
-        
-        let aapl = holdings.iter().find(|h| h.symbol == "AAPL").unwrap();
-        assert_eq!(aapl.quantity, 20.0);
-        assert_eq!(aapl.average_cost_native, 155.0);
-        assert_eq!(aapl.total_cost_jpy, 10.0 * 150.0 * 140.0 + 10.0 * 160.0 * 150.0);
-        
-        let toyota = holdings.iter().find(|h| h.symbol == "7203.T").unwrap();
-        assert_eq!(toyota.quantity, 100.0);
-        assert_eq!(toyota.average_cost_native, 2001.0); // (2000 * 100 + 100)/100
-        assert_eq!(toyota.total_cost_jpy, 200100.0);
-    }
+    let usd_jpy = fx::get_latest_usdjpy(pool).await?;
+    Ok((analysis, prices, usd_jpy))
 }

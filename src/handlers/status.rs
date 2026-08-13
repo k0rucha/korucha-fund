@@ -1,8 +1,8 @@
 use axum::{extract::State, response::IntoResponse};
 use askama::Template;
 
-use crate::AppState;
-use crate::template_response::TemplateResponse;
+use crate::handlers::AppState;
+use crate::handlers::template_response::TemplateResponse;
 
 #[derive(Template)]
 #[template(path = "status.html")]

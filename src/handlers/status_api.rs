@@ -1,15 +1,12 @@
 use axum::{extract::State, response::IntoResponse};
 use serde_json::json;
-use chrono::{FixedOffset, TimeZone};
+use chrono::TimeZone;
 
-use crate::AppState;
+use crate::handlers::AppState;
 use crate::db::api_stats;
+use crate::util::jst;
 
-fn jst() -> FixedOffset {
-    FixedOffset::east_opt(9 * 3600).unwrap()
-}
-
-fn jst_now() -> chrono::DateTime<FixedOffset> {
+fn jst_now() -> chrono::DateTime<chrono::FixedOffset> {
     chrono::Utc::now().with_timezone(&jst())
 }
 

@@ -1,12 +1,10 @@
-use axum::{extract::State, response::IntoResponse};
 use askama::Template;
-use std::collections::HashMap;
+use axum::{extract::State, response::IntoResponse};
 
-use crate::AppState;
-use crate::db::{transactions, prices, fx, symbols, snapshots};
-use crate::services::portfolio;
-use crate::template_response::TemplateResponse;
-use crate::util::{format_with_commas, signed_pct, jst_today};
+use crate::handlers::AppState;
+use crate::handlers::template_response::TemplateResponse;
+use crate::services::dashboard;
+use crate::util::{format_with_commas, signed_pct};
 
 pub struct HoldingView {
     pub symbol: String,
@@ -79,208 +77,84 @@ pub struct DashboardTemplate {
     pub mom_pnl_pct_delta_num: f64,
 }
 
-pub async fn dashboard_index(State(state): State<AppState>) -> Result<impl IntoResponse, axum::http::StatusCode> {
-    let txs = transactions::list_transactions(&state.db).await.map_err(|e| {
-        tracing::error!("Failed to fetch transactions: {}", e);
+pub async fn dashboard_index(
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, axum::http::StatusCode> {
+    let data = dashboard::load(&state.db).await.map_err(|error| {
+        tracing::error!(%error, "failed to load dashboard");
         axum::http::StatusCode::INTERNAL_SERVER_ERROR
     })?;
-
-    let holdings = portfolio::calculate_holdings(&txs);
-    let realized_pnl_jpy_num = portfolio::calculate_realized_pnl(&txs);
-
-    let latest_prices = prices::get_latest_prices(&state.db).await.unwrap_or_default();
-    let price_map: HashMap<String, f64> = latest_prices.into_iter().map(|p| (p.symbol, p.close_price)).collect();
-
-    // For *display* only, fall back to the spec's nominal 150 JPY/USD when no
-    // FX rate is cached — the dashboard is informational, and a working number
-    // is more useful than blank cells. Snapshot writers (scheduler/refresh)
-    // skip the write instead, so persisted history is never fabricated.
-    let usdjpy = fx::get_latest_usdjpy(&state.db).await.unwrap_or(None).unwrap_or(150.0);
-
-    // Fetch symbol names from DB
-    let symbol_list = symbols::get_symbol_names(&state.db).await.unwrap_or_default();
-    let name_map: HashMap<String, String> = symbol_list
+    let holding_views = data
+        .holdings
         .into_iter()
-        .filter_map(|s| s.name.map(|n| (s.symbol, n)))
+        .map(|performance| {
+            let h = performance.holding;
+            let (dod_available, dod_pnl_jpy_num, dod_pnl_pct_num) = performance
+                .day
+                .map(|change| (true, change.amount, change.percent))
+                .unwrap_or((false, 0.0, 0.0));
+            let (mom_available, mom_pnl_jpy_num, mom_pnl_pct_num) = performance
+                .month
+                .map(|change| (true, change.amount, change.percent))
+                .unwrap_or((false, 0.0, 0.0));
+            HoldingView {
+                symbol: h.symbol,
+                name: performance.name,
+                quantity: format!("{:.2}", h.quantity),
+                quantity_num: h.quantity,
+                average_cost_native: format!("{:.2}", h.average_cost_native),
+                average_cost_native_num: h.average_cost_native,
+                current_price_native: format!("{:.2}", h.current_price_native),
+                current_price_native_num: h.current_price_native,
+                total_cost_jpy: format_with_commas(h.total_cost_jpy),
+                current_value_jpy: format_with_commas(h.current_value_jpy),
+                current_value_jpy_num: h.current_value_jpy,
+                unrealized_pnl_jpy: format_with_commas(h.unrealized_pnl_jpy.abs()),
+                unrealized_pnl_jpy_num: h.unrealized_pnl_jpy,
+                unrealized_pnl_pct: format!("{:.2}", h.unrealized_pnl_pct),
+                unrealized_pnl_pct_num: h.unrealized_pnl_pct,
+                dod_available,
+                dod_pnl_jpy: format_with_commas(dod_pnl_jpy_num.abs()),
+                dod_pnl_jpy_num,
+                dod_pnl_pct: format!("{:.2}", dod_pnl_pct_num.abs()),
+                dod_pnl_pct_num,
+                mom_available,
+                mom_pnl_jpy: format_with_commas(mom_pnl_jpy_num.abs()),
+                mom_pnl_jpy_num,
+                mom_pnl_pct: format!("{:.2}", mom_pnl_pct_num.abs()),
+                mom_pnl_pct_num,
+            }
+        })
         .collect();
 
-    let today = jst_today();
-    let yesterday = today - chrono::Duration::days(1);
-    let one_month_ago = today - chrono::Duration::days(30);
-
-    let mut holding_views = Vec::new();
-    let mut total_cost_jpy = 0.0;
-    let mut total_value_jpy = 0.0;
-
-    for h in holdings {
-        let current_price = price_map.get(&h.symbol).copied().unwrap_or(0.0);
-        let fx_rate = if h.currency == "USD" { usdjpy } else { 1.0 };
-        
-        let current_value_jpy = h.quantity * current_price * fx_rate;
-        let unrealized_pnl_jpy = current_value_jpy - h.total_cost_jpy;
-        let unrealized_pnl_pct = if h.total_cost_jpy > 0.0 {
-            (unrealized_pnl_jpy / h.total_cost_jpy) * 100.0
-        } else {
-            0.0
-        };
-
-        total_cost_jpy += h.total_cost_jpy;
-        total_value_jpy += current_value_jpy;
-
-        let display_name = name_map.get(&h.symbol).cloned().unwrap_or_default();
-
-        // Per-holding dod/mom: compare current value vs prev price × current quantity.
-        let is_jpy = h.symbol.ends_with(".T");
-        let dod_prev_price = prices::get_price_on_or_before(&state.db, &h.symbol, yesterday).await.unwrap_or(None);
-        let mom_prev_price = prices::get_price_on_or_before(&state.db, &h.symbol, one_month_ago).await.unwrap_or(None);
-
-        let (dod_available, dod_pnl_jpy_num, dod_pnl_pct_num) = if let Some(pp) = dod_prev_price {
-            let prev_fx = if is_jpy { 1.0 } else {
-                fx::get_usdjpy_on_or_before(&state.db, yesterday).await.unwrap_or(None).unwrap_or(usdjpy)
-            };
-            let prev_value = h.quantity * pp * prev_fx;
-            let delta = current_value_jpy - prev_value;
-            let pct = if prev_value > 0.0 { (delta / prev_value) * 100.0 } else { 0.0 };
-            (true, delta, pct)
-        } else {
-            (false, 0.0, 0.0)
-        };
-
-        let (mom_available, mom_pnl_jpy_num, mom_pnl_pct_num) = if let Some(pp) = mom_prev_price {
-            let prev_fx = if is_jpy { 1.0 } else {
-                fx::get_usdjpy_on_or_before(&state.db, one_month_ago).await.unwrap_or(None).unwrap_or(usdjpy)
-            };
-            let prev_value = h.quantity * pp * prev_fx;
-            let delta = current_value_jpy - prev_value;
-            let pct = if prev_value > 0.0 { (delta / prev_value) * 100.0 } else { 0.0 };
-            (true, delta, pct)
-        } else {
-            (false, 0.0, 0.0)
-        };
-
-        holding_views.push(HoldingView {
-            symbol: h.symbol,
-            name: display_name,
-            quantity: format!("{:.2}", h.quantity),
-            quantity_num: h.quantity,
-            average_cost_native: format!("{:.2}", h.average_cost_native),
-            average_cost_native_num: h.average_cost_native,
-            current_price_native: format!("{:.2}", current_price),
-            current_price_native_num: current_price,
-            total_cost_jpy: format_with_commas(h.total_cost_jpy),
-            current_value_jpy: format_with_commas(current_value_jpy),
-            current_value_jpy_num: current_value_jpy,
-            // Templates render the sign before ¥, so we send absolute strings.
-            unrealized_pnl_jpy: format_with_commas(unrealized_pnl_jpy.abs()),
-            unrealized_pnl_jpy_num: unrealized_pnl_jpy,
-            unrealized_pnl_pct: format!("{:.2}", unrealized_pnl_pct),
-            unrealized_pnl_pct_num: unrealized_pnl_pct,
-            dod_available,
-            dod_pnl_jpy: format_with_commas(dod_pnl_jpy_num.abs()),
-            dod_pnl_jpy_num,
-            dod_pnl_pct: format!("{:.2}", dod_pnl_pct_num.abs()),
-            dod_pnl_pct_num,
-            mom_available,
-            mom_pnl_jpy: format_with_commas(mom_pnl_jpy_num.abs()),
-            mom_pnl_jpy_num,
-            mom_pnl_pct: format!("{:.2}", mom_pnl_pct_num.abs()),
-            mom_pnl_pct_num,
-        });
-    }
-
-    // Sort by current value descending — largest holding first.
-    holding_views.sort_by(|a, b| b.current_value_jpy_num.partial_cmp(&a.current_value_jpy_num).unwrap_or(std::cmp::Ordering::Equal));
-
-    let total_unrealized_pnl_jpy = total_value_jpy - total_cost_jpy;
-    let total_unrealized_pnl_pct = if total_cost_jpy > 0.0 {
-        (total_unrealized_pnl_jpy / total_cost_jpy) * 100.0
-    } else {
-        0.0
-    };
-
-    // Month-over-month deltas: compare against the snapshot closest to ~30
-    // days ago. If the closest available snapshot is much older than that
-    // window (say, no data in the last 60 days), the comparison would be
-    // misleading ("MoM" but actually a 6-month delta), so we suppress it.
-    let mom_floor = today - chrono::Duration::days(60);
-    let prev_snap = snapshots::get_snapshot_on_or_before(&state.db, one_month_ago)
-        .await
-        .unwrap_or(None)
-        .filter(|s| s.date >= mom_floor);
-
-    let mut mom_available = false;
-    let mut mom_ref_date = String::new();
-    let mut mom_value_delta_num = 0.0;
-    let mut mom_value_pct_num = 0.0;
-    let mut mom_cost_delta_num = 0.0;
-    let mut mom_pnl_delta_num = 0.0;
-    let mut mom_pnl_pct_delta_num = 0.0;
-
-    if let Some(s) = prev_snap {
-        mom_available = true;
-        mom_ref_date = s.date.to_string();
-        mom_value_delta_num = total_value_jpy - s.total_value_jpy;
-        mom_value_pct_num = if s.total_value_jpy > 0.0 {
-            (mom_value_delta_num / s.total_value_jpy) * 100.0
-        } else {
-            0.0
-        };
-        mom_cost_delta_num = total_cost_jpy - s.total_cost_jpy;
-        mom_pnl_delta_num = total_unrealized_pnl_jpy - s.unrealized_pnl_jpy;
-        let prev_pnl_pct = if s.total_cost_jpy > 0.0 {
-            (s.unrealized_pnl_jpy / s.total_cost_jpy) * 100.0
-        } else {
-            0.0
-        };
-        mom_pnl_pct_delta_num = total_unrealized_pnl_pct - prev_pnl_pct;
-    }
-
-    // Day-over-day deltas: compare against the most recent snapshot before
-    // today (i.e. yesterday or the last trading day). Suppress if the result
-    // is older than 7 days — a stale snapshot is not meaningful as "prev day".
-    let dod_floor = today - chrono::Duration::days(7);
-    let prev_dod_snap = snapshots::get_snapshot_on_or_before(&state.db, yesterday)
-        .await
-        .unwrap_or(None)
-        .filter(|s| s.date >= dod_floor);
-
-    let mut dod_available = false;
-    let mut dod_ref_date = String::new();
-    let mut dod_value_delta_num = 0.0_f64;
-    let mut dod_value_pct_num = 0.0_f64;
-    let mut dod_cost_delta_num = 0.0_f64;
-    let mut dod_pnl_delta_num = 0.0_f64;
-    let mut dod_pnl_pct_delta_num = 0.0_f64;
-
-    if let Some(s) = prev_dod_snap {
-        dod_available = true;
-        dod_ref_date = s.date.to_string();
-        dod_value_delta_num = total_value_jpy - s.total_value_jpy;
-        dod_value_pct_num = if s.total_value_jpy > 0.0 {
-            (dod_value_delta_num / s.total_value_jpy) * 100.0
-        } else {
-            0.0
-        };
-        dod_cost_delta_num = total_cost_jpy - s.total_cost_jpy;
-        dod_pnl_delta_num = total_unrealized_pnl_jpy - s.unrealized_pnl_jpy;
-        let prev_pnl_pct = if s.total_cost_jpy > 0.0 {
-            (s.unrealized_pnl_jpy / s.total_cost_jpy) * 100.0
-        } else {
-            0.0
-        };
-        dod_pnl_pct_delta_num = total_unrealized_pnl_pct - prev_pnl_pct;
-    }
-
-    let cumulative_pnl_jpy_num = realized_pnl_jpy_num + total_unrealized_pnl_jpy;
+    let (
+        dod_available,
+        dod_ref_date,
+        dod_value_delta_num,
+        dod_value_pct_num,
+        dod_cost_delta_num,
+        dod_pnl_delta_num,
+        dod_pnl_pct_delta_num,
+    ) = unpack_change(data.day);
+    let (
+        mom_available,
+        mom_ref_date,
+        mom_value_delta_num,
+        mom_value_pct_num,
+        mom_cost_delta_num,
+        mom_pnl_delta_num,
+        mom_pnl_pct_delta_num,
+    ) = unpack_change(data.month);
+    let portfolio = data.portfolio;
 
     Ok(TemplateResponse(DashboardTemplate {
         holdings: holding_views,
-        total_cost_jpy: format_with_commas(total_cost_jpy),
-        total_value_jpy: format_with_commas(total_value_jpy),
-        total_unrealized_pnl_jpy: format_with_commas(total_unrealized_pnl_jpy.abs()),
-        total_unrealized_pnl_jpy_num: total_unrealized_pnl_jpy,
-        total_unrealized_pnl_pct: format!("{:.2}", total_unrealized_pnl_pct),
-        total_unrealized_pnl_pct_num: total_unrealized_pnl_pct,
+        total_cost_jpy: format_with_commas(portfolio.total_cost_jpy),
+        total_value_jpy: format_with_commas(portfolio.total_value_jpy),
+        total_unrealized_pnl_jpy: format_with_commas(portfolio.unrealized_pnl_jpy.abs()),
+        total_unrealized_pnl_jpy_num: portfolio.unrealized_pnl_jpy,
+        total_unrealized_pnl_pct: format!("{:.2}", portfolio.unrealized_pnl_pct),
+        total_unrealized_pnl_pct_num: portfolio.unrealized_pnl_pct,
         dod_available,
         dod_ref_date,
         dod_value_delta: format_with_commas(dod_value_delta_num.abs()),
@@ -305,9 +179,27 @@ pub async fn dashboard_index(State(state): State<AppState>) -> Result<impl IntoR
         mom_pnl_delta_num,
         mom_pnl_pct_delta: format!("{:.2}pt", mom_pnl_pct_delta_num.abs()),
         mom_pnl_pct_delta_num,
-        realized_pnl_jpy: format_with_commas(realized_pnl_jpy_num.abs()),
-        realized_pnl_jpy_num,
-        cumulative_pnl_jpy: format_with_commas(cumulative_pnl_jpy_num.abs()),
-        cumulative_pnl_jpy_num,
+        realized_pnl_jpy: format_with_commas(portfolio.realized_pnl_jpy.abs()),
+        realized_pnl_jpy_num: portfolio.realized_pnl_jpy,
+        cumulative_pnl_jpy: format_with_commas(data.cumulative_pnl_jpy.abs()),
+        cumulative_pnl_jpy_num: data.cumulative_pnl_jpy,
     }))
+}
+
+fn unpack_change(
+    change: Option<dashboard::PortfolioChange>,
+) -> (bool, String, f64, f64, f64, f64, f64) {
+    change
+        .map(|change| {
+            (
+                true,
+                change.reference_date.to_string(),
+                change.value.amount,
+                change.value.percent,
+                change.cost,
+                change.pnl,
+                change.pnl_percent_points,
+            )
+        })
+        .unwrap_or((false, String::new(), 0.0, 0.0, 0.0, 0.0, 0.0))
 }
