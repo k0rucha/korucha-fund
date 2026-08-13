@@ -1,16 +1,35 @@
-use sqlx::SqlitePool;
 use chrono::NaiveDate;
+use sqlx::SqlitePool;
 
 pub async fn get_latest_usdjpy(pool: &SqlitePool) -> Result<Option<f64>, sqlx::Error> {
     let row: Option<(f64,)> = sqlx::query_as(
         r#"
         SELECT rate FROM fx_cache WHERE pair = 'USDJPY' ORDER BY date DESC LIMIT 1
-        "#
+        "#,
     )
     .fetch_optional(pool)
     .await?;
 
     Ok(row.map(|r| r.0))
+}
+
+pub async fn upsert_usdjpy(
+    pool: &SqlitePool,
+    date: NaiveDate,
+    rate: f64,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        INSERT INTO fx_cache (pair, date, rate)
+        VALUES ('USDJPY', ?, ?)
+        ON CONFLICT(pair, date) DO UPDATE SET rate = excluded.rate
+        "#,
+    )
+    .bind(date)
+    .bind(rate)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 pub async fn bulk_insert_usdjpy(
@@ -24,7 +43,7 @@ pub async fn bulk_insert_usdjpy(
     let mut inserted = 0usize;
     for (date, rate) in rows {
         let res = sqlx::query(
-            "INSERT OR IGNORE INTO fx_cache (pair, date, rate) VALUES ('USDJPY', ?, ?)"
+            "INSERT OR IGNORE INTO fx_cache (pair, date, rate) VALUES ('USDJPY', ?, ?)",
         )
         .bind(date)
         .bind(rate)
@@ -41,7 +60,7 @@ pub async fn get_usdjpy_on_or_before(
     date: NaiveDate,
 ) -> Result<Option<f64>, sqlx::Error> {
     let row: Option<(f64,)> = sqlx::query_as(
-        "SELECT rate FROM fx_cache WHERE pair = 'USDJPY' AND date <= ? ORDER BY date DESC LIMIT 1"
+        "SELECT rate FROM fx_cache WHERE pair = 'USDJPY' AND date <= ? ORDER BY date DESC LIMIT 1",
     )
     .bind(date)
     .fetch_optional(pool)

@@ -1,54 +1,18 @@
-use axum::{
-    extract::{Path, Query, State},
-    response::IntoResponse,
-    http::{StatusCode, HeaderMap},
-    Json,
-};
 use askama::Template;
-use serde::{Serialize, Deserialize};
-use std::collections::HashMap;
+use axum::{
+    Json,
+    extract::{Path, Query, State},
+    http::HeaderMap,
+    response::IntoResponse,
+};
+use serde::{Deserialize, Serialize};
 
-use crate::AppState;
-use crate::db::{transactions, prices, fx, symbols, snapshots, share_cards};
-use crate::services::portfolio;
-use crate::template_response::TemplateResponse;
-use crate::util::{format_with_commas, signed_with_commas, signed_pct};
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct CardHolding {
-    pub symbol: String,
-    pub name: String,
-    pub current_value_jpy: f64,
-    pub unrealized_pnl_jpy: f64,
-    pub unrealized_pnl_pct: f64,
-}
-
-/// Generate a short, time-ordered hex ID for a share card.
-/// We mix in the OS thread id to defend against (very unlikely) nanosecond
-/// collisions when two share cards are created in the same instant.
-/// Shared with the ticker-share handler.
-pub(crate) fn generate_id() -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
-
-    let nanos = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0) as u64;
-    let mut hasher = DefaultHasher::new();
-    std::thread::current().id().hash(&mut hasher);
-    let salt = hasher.finish() & 0xFFFF;
-    format!("{:x}{:04x}", nanos, salt)
-}
-
-fn normalize_span(s: Option<&String>) -> String {
-    normalize_span_str(s.map(|v| v.as_str()))
-}
-
-pub(crate) fn normalize_span_str(s: Option<&str>) -> String {
-    match s.unwrap_or("all") {
-        "7d" => "7d".into(),
-        "30d" => "30d".into(),
-        _ => "all".into(),
-    }
-}
+use crate::db::{share_cards, snapshots};
+use crate::handlers::AppState;
+use crate::handlers::error::{AppError, AppResult};
+use crate::handlers::template_response::TemplateResponse;
+use crate::services::share_cards::{self as share_service, FundHoldingSnapshot};
+use crate::util::{format_with_commas, signed_pct, signed_with_commas};
 
 pub(crate) fn base_url(headers: &HeaderMap) -> String {
     let host = headers
@@ -58,75 +22,14 @@ pub(crate) fn base_url(headers: &HeaderMap) -> String {
     let scheme = headers
         .get("x-forwarded-proto")
         .and_then(|h| h.to_str().ok())
-        .unwrap_or_else(|| if host.starts_with("localhost") || host.starts_with("127.") { "http" } else { "https" });
-    format!("{}://{}", scheme, host)
-}
-
-async fn compute_current(
-    state: &AppState,
-) -> Result<(f64, f64, f64, Vec<CardHolding>), StatusCode> {
-    let txs = transactions::list_transactions(&state.db).await.map_err(|e| {
-        tracing::error!("share: list_transactions: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    let holdings = portfolio::calculate_holdings(&txs);
-
-    let latest_prices = prices::get_latest_prices(&state.db).await.unwrap_or_default();
-    let price_map: HashMap<String, f64> = latest_prices
-        .into_iter()
-        .map(|p| (p.symbol, p.close_price))
-        .collect();
-
-    // Display-only fallback (see fragments.rs for rationale).
-    let usdjpy = fx::get_latest_usdjpy(&state.db)
-        .await
-        .unwrap_or(None)
-        .unwrap_or(150.0);
-
-    let symbol_list = symbols::get_symbol_names(&state.db).await.unwrap_or_default();
-    let name_map: HashMap<String, String> = symbol_list
-        .into_iter()
-        .filter_map(|s| s.name.map(|n| (s.symbol, n)))
-        .collect();
-
-    let mut total_value = 0.0;
-    let mut total_cost = 0.0;
-    let mut card_holdings = Vec::new();
-
-    for h in holdings {
-        let current_price = price_map.get(&h.symbol).copied().unwrap_or(0.0);
-        let fx_rate = if h.currency == "USD" { usdjpy } else { 1.0 };
-        let value_jpy = h.quantity * current_price * fx_rate;
-        let pnl = value_jpy - h.total_cost_jpy;
-        let pnl_pct = if h.total_cost_jpy > 0.0 {
-            (pnl / h.total_cost_jpy) * 100.0
-        } else {
-            0.0
-        };
-
-        total_value += value_jpy;
-        total_cost += h.total_cost_jpy;
-
-        let display_name = name_map.get(&h.symbol).cloned().unwrap_or_default();
-
-        card_holdings.push(CardHolding {
-            symbol: h.symbol,
-            name: display_name,
-            current_value_jpy: value_jpy,
-            unrealized_pnl_jpy: pnl,
-            unrealized_pnl_pct: pnl_pct,
+        .unwrap_or_else(|| {
+            if host.starts_with("localhost") || host.starts_with("127.") {
+                "http"
+            } else {
+                "https"
+            }
         });
-    }
-
-    card_holdings.sort_by(|a, b| {
-        b.current_value_jpy
-            .partial_cmp(&a.current_value_jpy)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    let pnl = total_value - total_cost;
-    Ok((total_value, total_cost, pnl, card_holdings))
+    format!("{}://{}", scheme, host)
 }
 
 #[derive(Deserialize)]
@@ -140,58 +43,13 @@ pub struct CreateShareResponse {
     pub url: String,
 }
 
-use crate::error::{AppResult, AppError};
-
 pub async fn create_share_card(
     State(state): State<AppState>,
     Query(q): Query<CreateShareQuery>,
 ) -> AppResult<impl IntoResponse> {
-    let span = normalize_span(q.span.as_ref());
-
-    let (total_value, total_cost, pnl, holdings) = compute_current(&state).await.map_err(|s| {
-        if s == StatusCode::NOT_FOUND { AppError::NotFound }
-        else { AppError::Other(anyhow::anyhow!("portfolio computation failed")) }
-    })?;
-
-    let holdings_json = serde_json::to_string(&holdings).map_err(|e| {
-        tracing::error!("share: serialize holdings: {}", e);
-        AppError::Other(e.into())
-    })?;
-
-    // Retry a few times on (extraordinarily unlikely) ID collision.
-    let mut id = String::new();
-    let mut last_err: Option<sqlx::Error> = None;
-    for attempt in 0..3 {
-        let candidate = generate_id();
-        match share_cards::insert_share_card(
-            &state.db,
-            &candidate,
-            total_value,
-            total_cost,
-            pnl,
-            &holdings_json,
-            &span,
-        )
+    let id = share_service::create_fund_card(&state.db, q.span.as_deref())
         .await
-        {
-            Ok(()) => {
-                id = candidate;
-                last_err = None;
-                break;
-            }
-            Err(sqlx::Error::Database(db_err)) if db_err.is_unique_violation() => {
-                tracing::warn!("share: id collision on attempt {}, retrying", attempt);
-                last_err = Some(sqlx::Error::Database(db_err));
-                tokio::time::sleep(std::time::Duration::from_millis(1)).await;
-                continue;
-            }
-            Err(e) => return Err(AppError::Database(e)),
-        }
-    }
-    if let Some(e) = last_err {
-        return Err(AppError::Database(e));
-    }
-
+        .map_err(AppError::Other)?;
     let url = format!("/share/{}", id);
     Ok(Json(CreateShareResponse { id, url }))
 }
@@ -255,13 +113,13 @@ pub async fn view_share_card(
         .map_err(AppError::Database)?
         .ok_or(AppError::NotFound)?;
 
-    let issue_holdings: Vec<CardHolding> =
+    let issue_holdings: Vec<FundHoldingSnapshot> =
         serde_json::from_str(&card.holdings_json).unwrap_or_default();
 
-    let (cur_value, _cur_cost, _cur_pnl, _cur_holdings) = compute_current(&state).await.map_err(|s| {
-        if s == StatusCode::NOT_FOUND { AppError::NotFound }
-        else { AppError::Other(anyhow::anyhow!("portfolio computation failed")) }
-    })?;
+    let cur_value = share_service::current_fund(&state.db)
+        .await
+        .map_err(AppError::Database)?
+        .total_value_jpy;
 
     let issue_pnl_pct = if card.total_cost_jpy > 0.0 {
         (card.unrealized_pnl_jpy / card.total_cost_jpy) * 100.0
@@ -306,11 +164,10 @@ pub async fn view_share_card(
         .collect();
 
     // Chart history: every snapshot on/before issuance date. JS filters by span.
-    let snaps = snapshots::list_snapshots(&state.db).await.unwrap_or_default();
-    let filtered: Vec<_> = snaps
-        .into_iter()
-        .filter(|s| s.date <= issue_date)
-        .collect();
+    let snaps = snapshots::list_snapshots(&state.db)
+        .await
+        .unwrap_or_default();
+    let filtered: Vec<_> = snaps.into_iter().filter(|s| s.date <= issue_date).collect();
     let history_dates: Vec<String> = filtered.iter().map(|s| s.date.to_string()).collect();
     let history_values: Vec<f64> = filtered.iter().map(|s| s.total_value_jpy).collect();
     let history_pnls: Vec<f64> = filtered.iter().map(|s| s.unrealized_pnl_jpy).collect();

@@ -1,42 +1,59 @@
+use chrono::{NaiveDate, NaiveDateTime};
 use sqlx::{FromRow, SqlitePool};
-use chrono::NaiveDate;
-use serde::{Serialize, Deserialize};
 
-#[derive(Debug, FromRow, Clone, Serialize, Deserialize)]
-pub struct Transaction {
-    pub id: i64,
-    pub symbol: String,
-    pub txn_type: String, // 'BUY' | 'SELL'
-    pub quantity: f64,
-    pub price: f64,
-    pub currency: String, // 'JPY' | 'USD'
-    pub fee: f64,
-    pub txn_date: NaiveDate,
-    pub fx_rate_to_jpy: Option<f64>,
-    pub notes: Option<String>,
-    pub created_at: Option<chrono::NaiveDateTime>,
+use crate::domain::portfolio::{NewTransaction, Transaction};
+
+#[derive(FromRow)]
+struct TransactionRow {
+    id: i64,
+    symbol: String,
+    txn_type: String,
+    quantity: f64,
+    price: f64,
+    currency: String,
+    fee: f64,
+    txn_date: NaiveDate,
+    fx_rate_to_jpy: Option<f64>,
+    notes: Option<String>,
+    created_at: Option<NaiveDateTime>,
 }
 
-#[derive(Debug, Clone)]
-pub struct CreateTransaction {
-    pub symbol: String,
-    pub txn_type: String,
-    pub quantity: f64,
-    pub price: f64,
-    pub currency: String,
-    pub fee: f64,
-    pub txn_date: NaiveDate,
-    pub fx_rate_to_jpy: Option<f64>,
-    pub notes: Option<String>,
+impl From<TransactionRow> for Transaction {
+    fn from(row: TransactionRow) -> Self {
+        Self {
+            id: row.id,
+            symbol: row.symbol,
+            txn_type: row.txn_type,
+            quantity: row.quantity,
+            price: row.price,
+            currency: row.currency,
+            fee: row.fee,
+            txn_date: row.txn_date,
+            fx_rate_to_jpy: row.fx_rate_to_jpy,
+            notes: row.notes,
+            created_at: row.created_at,
+        }
+    }
 }
 
 pub async fn list_transactions(pool: &SqlitePool) -> Result<Vec<Transaction>, sqlx::Error> {
-    sqlx::query_as::<_, Transaction>("SELECT * FROM transactions ORDER BY txn_date DESC, id DESC")
-        .fetch_all(pool)
-        .await
+    let rows = sqlx::query_as::<_, TransactionRow>(
+        r#"
+        SELECT id, symbol, txn_type, quantity, price, currency, fee,
+               txn_date, fx_rate_to_jpy, notes, created_at
+        FROM transactions
+        ORDER BY txn_date DESC, id DESC
+        "#,
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(Transaction::from).collect())
 }
 
-pub async fn create_transaction(pool: &SqlitePool, data: CreateTransaction) -> Result<i64, sqlx::Error> {
+pub async fn create_transaction(
+    pool: &SqlitePool,
+    data: NewTransaction,
+) -> Result<i64, sqlx::Error> {
     Ok(sqlx::query!(
         r#"
         INSERT INTO transactions (symbol, txn_type, quantity, price, currency, fee, txn_date, fx_rate_to_jpy, notes)
@@ -55,6 +72,38 @@ pub async fn create_transaction(pool: &SqlitePool, data: CreateTransaction) -> R
     .execute(pool)
     .await?
     .last_insert_rowid())
+}
+
+pub async fn create_transactions(
+    pool: &SqlitePool,
+    transactions: Vec<NewTransaction>,
+) -> Result<(), sqlx::Error> {
+    if transactions.is_empty() {
+        return Ok(());
+    }
+
+    let mut db_transaction = pool.begin().await?;
+    for data in transactions {
+        sqlx::query(
+            r#"
+            INSERT INTO transactions
+                (symbol, txn_type, quantity, price, currency, fee, txn_date, fx_rate_to_jpy, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            "#,
+        )
+        .bind(data.symbol)
+        .bind(data.txn_type)
+        .bind(data.quantity)
+        .bind(data.price)
+        .bind(data.currency)
+        .bind(data.fee)
+        .bind(data.txn_date)
+        .bind(data.fx_rate_to_jpy)
+        .bind(data.notes)
+        .execute(&mut *db_transaction)
+        .await?;
+    }
+    db_transaction.commit().await
 }
 
 pub async fn delete_transaction(pool: &SqlitePool, id: i64) -> Result<u64, sqlx::Error> {

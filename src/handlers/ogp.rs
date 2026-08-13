@@ -6,9 +6,9 @@ use axum::{
 };
 use chrono::Duration;
 
-use crate::AppState;
+use crate::handlers::AppState;
 use crate::db::{share_cards, ticker_share_cards, snapshots, prices};
-use crate::handlers::share::CardHolding;
+use crate::services::share_cards::FundHoldingSnapshot;
 use crate::util::{format_with_commas, signed_pct};
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -124,16 +124,28 @@ fn chart_fragment(values: &[f64], x: f64, y: f64, w: f64, h: f64) -> String {
 //   4. Bottom gradient overlay (y=480 → y=630, transparent→opaque)
 //   5. Text: header / stats / footer
 
-fn portfolio_svg(
+struct PortfolioSvg<'a> {
     total_value_jpy: f64,
     total_cost_jpy: f64,
     unrealized_pnl_jpy: f64,
-    created_at: &str,
-    holdings: &[CardHolding],
-    chart_values: &[f64],
+    created_at: &'a str,
+    holdings: &'a [FundHoldingSnapshot],
+    chart_values: &'a [f64],
     prev_day_value: Option<f64>,
     prev_month_value: Option<f64>,
-) -> String {
+}
+
+fn portfolio_svg(input: PortfolioSvg<'_>) -> String {
+    let PortfolioSvg {
+        total_value_jpy,
+        total_cost_jpy,
+        unrealized_pnl_jpy,
+        created_at,
+        holdings,
+        chart_values,
+        prev_day_value,
+        prev_month_value,
+    } = input;
     let pnl_pct = if total_cost_jpy > 0.0 { (unrealized_pnl_jpy / total_cost_jpy) * 100.0 } else { 0.0 };
     let pnl_color   = if unrealized_pnl_jpy >= 0.0 { "#34D399" } else { "#F87171" };
     let pnl_sign    = if unrealized_pnl_jpy >= 0.0 { "+" } else { "-" };
@@ -233,20 +245,36 @@ fn portfolio_svg(
 
 // ─── Ticker OGP SVG (1200×630) ────────────────────────────────────────────
 
-fn ticker_svg(
-    symbol: &str,
-    display_name: &str,
-    currency: &str,
+struct TickerSvg<'a> {
+    symbol: &'a str,
+    display_name: &'a str,
+    currency: &'a str,
     issue_price_native: f64,
     fx_rate_at_issue: Option<f64>,
     quantity: Option<f64>,
     avg_cost_native: Option<f64>,
     issue_pnl_jpy: Option<f64>,
-    created_at: &str,
-    chart_values: &[f64],
+    created_at: &'a str,
+    chart_values: &'a [f64],
     prev_day_price: Option<f64>,
     prev_month_price: Option<f64>,
-) -> String {
+}
+
+fn ticker_svg(input: TickerSvg<'_>) -> String {
+    let TickerSvg {
+        symbol,
+        display_name,
+        currency,
+        issue_price_native,
+        fx_rate_at_issue,
+        quantity,
+        avg_cost_native,
+        issue_pnl_jpy,
+        created_at,
+        chart_values,
+        prev_day_price,
+        prev_month_price,
+    } = input;
     let unit = if currency == "JPY" { "¥" } else { "$" };
     let integer = currency == "JPY";
 
@@ -381,7 +409,8 @@ pub async fn share_ogp(
     let issue_date  = created_jst.date_naive();
     let created_at  = created_jst.format("%Y-%m-%d").to_string();
 
-    let holdings: Vec<CardHolding> = serde_json::from_str(&card.holdings_json).unwrap_or_default();
+    let holdings: Vec<FundHoldingSnapshot> =
+        serde_json::from_str(&card.holdings_json).unwrap_or_default();
 
     let since = issue_date - Duration::days(30);
     let chart_values: Vec<f64> = snapshots::list_snapshots(&state.db)
@@ -396,10 +425,16 @@ pub async fn share_ogp(
     let prev_month_value = snapshots::get_snapshot_on_or_before(&state.db, issue_date - Duration::days(30))
         .await.unwrap_or(None).map(|s| s.total_value_jpy);
 
-    let svg = portfolio_svg(
-        card.total_value_jpy, card.total_cost_jpy, card.unrealized_pnl_jpy,
-        &created_at, &holdings, &chart_values, prev_day_value, prev_month_value,
-    );
+    let svg = portfolio_svg(PortfolioSvg {
+        total_value_jpy: card.total_value_jpy,
+        total_cost_jpy: card.total_cost_jpy,
+        unrealized_pnl_jpy: card.unrealized_pnl_jpy,
+        created_at: &created_at,
+        holdings: &holdings,
+        chart_values: &chart_values,
+        prev_day_value,
+        prev_month_value,
+    });
 
     let png = tokio::task::spawn_blocking(move || render_png(&svg))
         .await
@@ -437,12 +472,20 @@ pub async fn ticker_ogp(
         .await.unwrap_or(None);
 
     let display_name = card.display_name.as_deref().unwrap_or("");
-    let svg = ticker_svg(
-        &card.symbol, display_name, &card.currency,
-        card.issue_price_native, card.fx_rate_at_issue,
-        card.quantity, card.avg_cost_native, card.issue_pnl_jpy,
-        &created_at, &chart_values, prev_day_price, prev_month_price,
-    );
+    let svg = ticker_svg(TickerSvg {
+        symbol: &card.symbol,
+        display_name,
+        currency: &card.currency,
+        issue_price_native: card.issue_price_native,
+        fx_rate_at_issue: card.fx_rate_at_issue,
+        quantity: card.quantity,
+        avg_cost_native: card.avg_cost_native,
+        issue_pnl_jpy: card.issue_pnl_jpy,
+        created_at: &created_at,
+        chart_values: &chart_values,
+        prev_day_price,
+        prev_month_price,
+    });
 
     let png = tokio::task::spawn_blocking(move || render_png(&svg))
         .await

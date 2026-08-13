@@ -1,48 +1,28 @@
-mod auth;
+mod clients;
 mod config;
-mod error;
-mod template_response;
 pub mod db;
+mod domain;
 pub mod handlers;
 pub mod services;
 pub mod util;
 
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-
 use anyhow::{Context, Result};
-use axum::{
-    Router,
-    middleware::{self, Next},
-    routing::{get, post, delete},
-    http::{StatusCode, Request},
-    response::IntoResponse,
-};
-
 use sqlx::SqlitePool;
-use sqlx::sqlite::{SqlitePoolOptions, SqliteConnectOptions};
-use std::str::FromStr;
-use tower_http::trace::TraceLayer;
-use tracing_subscriber::EnvFilter;
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use std::io::BufRead;
+use std::str::FromStr;
+use tracing_subscriber::EnvFilter;
 
 use crate::config::Config;
-
-#[derive(Clone)]
-pub struct AppState {
-    pub config: Arc<Config>,
-    pub db: SqlitePool,
-    /// Set to true while a manual refresh is running, to prevent overlapping
-    /// runs from blasting yfinance and double-counting the rate limiter.
-    pub refresh_lock: Arc<AtomicBool>,
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let _ = dotenvy::dotenv();
 
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
         .init();
 
     let config = Config::from_env()?;
@@ -63,10 +43,10 @@ async fn main() -> Result<()> {
         .await
         .context("failed to run migrations")?;
 
-    let state = AppState {
-        config: Arc::new(config),
+    let state = handlers::AppState {
+        config: std::sync::Arc::new(config),
         db,
-        refresh_lock: Arc::new(AtomicBool::new(false)),
+        refresh_lock: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
     };
 
     // Phase 8: Start the daily scheduler
@@ -85,33 +65,7 @@ async fn main() -> Result<()> {
         start_console_listener(console_db).await;
     });
 
-    let admin_routes = Router::new()
-        .route("/", get(handlers::admin::admin_index))
-        .route("/transactions", post(handlers::admin::add_transaction))
-        .route("/transactions/:id", delete(handlers::admin::delete_transaction))
-        .route("/export", get(handlers::admin::export_transactions))
-        .route("/import", post(handlers::admin::import_transactions))
-        .route_layer(middleware::from_fn_with_state(state.clone(), auth::basic_auth));
-
-    let app = Router::new()
-        .route("/", get(handlers::dashboard::dashboard_index))
-        .route("/status", get(handlers::status::get_status))
-        .route("/api/status", get(handlers::status_api::get_status_json))
-        .route("/fragment/composition", get(handlers::fragments::composition_json))
-        .route("/fragment/timeseries", get(handlers::fragments::timeseries_json))
-        .route("/refresh", post(handlers::refresh::refresh_prices))
-        .route("/share", post(handlers::share::create_share_card))
-        .route("/share/:id", get(handlers::share::view_share_card))
-        .route("/share/:id/ogp.png", get(handlers::ogp::share_ogp))
-        .route("/ticker-share", post(handlers::ticker_share::create_ticker_share_card))
-        .route("/ticker/:id", get(handlers::ticker_share::view_ticker_share_card))
-        .route("/ticker/:id/ogp.png", get(handlers::ogp::ticker_ogp))
-        .nest("/admin", admin_routes)
-        .nest_service("/static", tower_http::services::ServeDir::new("static"))
-        .fallback(handler_404)
-        .layer(middleware::from_fn(error_handler))
-        .layer(TraceLayer::new_for_http())
-        .with_state(state);
+    let app = handlers::router(state);
 
     let addr = format!("0.0.0.0:{}", port);
     let listener = tokio::net::TcpListener::bind(&addr)
@@ -191,9 +145,10 @@ async fn start_console_listener(pool: SqlitePool) {
 }
 
 async fn start_scheduler(pool: &SqlitePool, cron_expr: &str) -> Result<()> {
-    use tokio_cron_scheduler::{JobScheduler, Job};
+    use tokio_cron_scheduler::{Job, JobScheduler};
 
-    let sched = JobScheduler::new().await
+    let sched = JobScheduler::new()
+        .await
         .context("failed to create scheduler")?;
 
     let pool = pool.clone();
@@ -205,16 +160,16 @@ async fn start_scheduler(pool: &SqlitePool, cron_expr: &str) -> Result<()> {
     })
     .context("failed to create cron job")?;
 
-    sched.add(job).await
+    sched
+        .add(job)
+        .await
         .context("failed to add job to scheduler")?;
 
-    sched.start().await
-        .context("failed to start scheduler")?;
+    sched.start().await.context("failed to start scheduler")?;
 
     tracing::info!("Scheduler started with cron: {}", cron_expr);
     Ok(())
 }
-
 
 async fn shutdown_signal() {
     let ctrl_c = async {
@@ -240,21 +195,4 @@ async fn shutdown_signal() {
     }
 
     tracing::info!("shutdown signal received");
-}
-
-async fn handler_404() -> impl axum::response::IntoResponse {
-    crate::error::AppError::NotFound
-}
-
-async fn error_handler(req: Request<axum::body::Body>, next: Next) -> axum::response::Response {
-    let response = next.run(req).await;
-    let status = response.status();
-
-    // 404 is already rendered by handler_404 / AppError::NotFound::into_response().
-    // Only intercept 405 here, which has no dedicated fallback handler.
-    if status == StatusCode::METHOD_NOT_ALLOWED {
-        crate::error::AppError::MethodNotAllowed.into_response()
-    } else {
-        response
-    }
 }
