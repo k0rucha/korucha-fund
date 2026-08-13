@@ -1,71 +1,79 @@
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-    <div class="da-card p-7 kpi-blue relative group {% if dod_available || mom_available %}cursor-help{% endif %}">
-        <div class="text-sm font-bold text-da-gray-600 uppercase tracking-wider mb-4">総評価額</div>
-        <div class="text-4xl font-black text-da-blue-1200 leading-none tabular-nums">¥{{ total_value_jpy }}</div>
-        {% if dod_available || mom_available %}
-        <div class="mom-tooltip">
-            {% if dod_available %}
-            <div class="text-[10px] text-da-gray-400 uppercase tracking-wider mb-1">前日比 ({{ dod_ref_date }})</div>
-            <div class="font-bold {% if dod_value_delta_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %} {% if mom_available %}mb-2{% endif %}">
-                {% if dod_value_delta_num >= 0.0 %}+{% else %}-{% endif %}¥{{ dod_value_delta }} <span class="text-da-gray-600">({{ dod_value_pct }})</span>
+<div class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-12 gap-5">
+    <section class="dashboard-hero da-card relative overflow-hidden p-6 sm:p-8 md:col-span-3 xl:col-span-6" aria-labelledby="portfolio-value-title">
+        <div class="flex items-start justify-between gap-4">
+            <div>
+                <p class="hero-muted text-[10px] font-bold tracking-[0.18em] text-white/60 uppercase mb-2">Portfolio value</p>
+                <h3 id="portfolio-value-title" class="hero-muted text-sm font-bold text-white/80">総評価額</h3>
             </div>
-            {% endif %}
-            {% if mom_available %}
-            {% if dod_available %}<div class="border-t border-da-gray-200 my-1 opacity-40"></div>{% endif %}
-            <div class="text-[10px] text-da-gray-400 uppercase tracking-wider mb-1">先月比 ({{ mom_ref_date }})</div>
-            <div class="font-bold {% if mom_value_delta_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}">
-                {% if mom_value_delta_num >= 0.0 %}+{% else %}-{% endif %}¥{{ mom_value_delta }} <span class="text-da-gray-600">({{ mom_value_pct }})</span>
+            <span class="snapshot-badge">LATEST SNAPSHOT</span>
+        </div>
+
+        <p class="hero-value mt-5 text-[clamp(2.2rem,6vw,3.6rem)] font-black leading-none tracking-tight tabular-nums text-white">
+            ¥{{ total_value_jpy }}
+        </p>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-7">
+            <div class="performance-stat">
+                <p class="hero-muted text-[10px] font-bold tracking-wider text-white/60 uppercase">
+                    前日比{% if dod_available %} · {{ dod_ref_date }}{% endif %}
+                </p>
+                {% if dod_available %}
+                <p class="hero-change mt-1.5 text-base font-bold tabular-nums {% if dod_value_delta_num >= 0.0 %}text-cyan-200{% else %}text-rose-200{% endif %}">
+                    {% if dod_value_delta_num >= 0.0 %}+{% else %}-{% endif %}¥{{ dod_value_delta }}
+                    <span class="ml-1 text-xs text-white/70">{{ dod_value_pct }}</span>
+                </p>
+                {% else %}
+                <p class="hero-muted mt-1.5 text-sm font-medium text-white/60">比較データを蓄積中</p>
+                {% endif %}
             </div>
-            {% endif %}
+            <div class="performance-stat">
+                <p class="hero-muted text-[10px] font-bold tracking-wider text-white/60 uppercase">
+                    先月比{% if mom_available %} · {{ mom_ref_date }}{% endif %}
+                </p>
+                {% if mom_available %}
+                <p class="hero-change mt-1.5 text-base font-bold tabular-nums {% if mom_value_delta_num >= 0.0 %}text-cyan-200{% else %}text-rose-200{% endif %}">
+                    {% if mom_value_delta_num >= 0.0 %}+{% else %}-{% endif %}¥{{ mom_value_delta }}
+                    <span class="ml-1 text-xs text-white/70">{{ mom_value_pct }}</span>
+                </p>
+                {% else %}
+                <p class="hero-muted mt-1.5 text-sm font-medium text-white/60">比較データを蓄積中</p>
+                {% endif %}
+            </div>
         </div>
+    </section>
+
+    <section class="metric-card da-card p-5 sm:p-6 kpi-orange md:col-span-1 xl:col-span-2" aria-labelledby="portfolio-cost-title">
+        <p class="text-[10px] font-bold tracking-[0.16em] text-da-gray-400 uppercase mb-3">Invested</p>
+        <h3 id="portfolio-cost-title" class="text-sm font-bold text-da-gray-600">投資元本</h3>
+        <p class="metric-value mt-5 font-black leading-none tracking-tight text-da-gray-800 tabular-nums">¥{{ total_cost_jpy }}</p>
+        {% if mom_available %}
+        <p class="mt-4 text-xs text-da-gray-500 tabular-nums">
+            先月から {% if mom_cost_delta_num >= 0.0 %}+{% else %}-{% endif %}¥{{ mom_cost_delta }}
+        </p>
+        {% else %}
+        <p class="mt-4 text-xs text-da-gray-400">取得原価の合計</p>
         {% endif %}
-    </div>
-    <div class="da-card p-7 kpi-orange relative group {% if dod_available || mom_available %}cursor-help{% endif %}">
-        <div class="text-sm font-bold text-da-gray-600 uppercase tracking-wider mb-4">投資元本</div>
-        <div class="text-4xl font-black text-da-gray-800 leading-none tabular-nums">¥{{ total_cost_jpy }}</div>
-        {% if dod_available || mom_available %}
-        <div class="mom-tooltip">
-            {% if dod_available %}
-            <div class="text-[10px] text-da-gray-400 uppercase tracking-wider mb-1">前日比 ({{ dod_ref_date }})</div>
-            <div class="font-bold text-da-gray-800 {% if mom_available %}mb-2{% endif %}">{% if dod_cost_delta_num >= 0.0 %}+{% else %}-{% endif %}¥{{ dod_cost_delta }}</div>
-            {% endif %}
-            {% if mom_available %}
-            {% if dod_available %}<div class="border-t border-da-gray-200 my-1 opacity-40"></div>{% endif %}
-            <div class="text-[10px] text-da-gray-400 uppercase tracking-wider mb-1">先月比 ({{ mom_ref_date }})</div>
-            <div class="font-bold text-da-gray-800">{% if mom_cost_delta_num >= 0.0 %}+{% else %}-{% endif %}¥{{ mom_cost_delta }}</div>
-            {% endif %}
-        </div>
-        {% endif %}
-    </div>
-    <div class="da-card p-7 {% if total_unrealized_pnl_jpy_num < 0.0 %}kpi-red{% else %}kpi-green{% endif %} relative group {% if dod_available || mom_available %}cursor-help{% endif %}">
-        <div class="text-sm font-bold text-da-gray-600 uppercase tracking-wider mb-4">含み損益</div>
-        <div class="text-4xl font-black leading-none tabular-nums {% if total_unrealized_pnl_jpy_num < 0.0 %}text-red-600{% else %}text-emerald-600{% endif %}">
+    </section>
+
+    <section class="metric-card da-card p-5 sm:p-6 {% if total_unrealized_pnl_jpy_num < 0.0 %}kpi-red{% else %}kpi-green{% endif %} md:col-span-1 xl:col-span-2" aria-labelledby="portfolio-unrealized-title">
+        <p class="text-[10px] font-bold tracking-[0.16em] text-da-gray-400 uppercase mb-3">Unrealized</p>
+        <h3 id="portfolio-unrealized-title" class="text-sm font-bold text-da-gray-600">含み損益</h3>
+        <p class="metric-value mt-5 font-black leading-none tracking-tight tabular-nums {% if total_unrealized_pnl_jpy_num < 0.0 %}text-red-600{% else %}text-emerald-600{% endif %}">
             {% if total_unrealized_pnl_jpy_num < 0.0 %}-{% else %}+{% endif %}¥{{ total_unrealized_pnl_jpy }}
-        </div>
-        <div class="mt-3 text-xs text-da-gray-500 tabular-nums">
-            <span class="font-semibold {% if total_unrealized_pnl_pct_num < 0.0 %}text-red-600{% else %}text-emerald-600{% endif %}">{% if total_unrealized_pnl_pct_num < 0.0 %}{% else %}+{% endif %}{{ total_unrealized_pnl_pct }}%</span>
-        </div>
-        {% if dod_available || mom_available %}
-        <div class="mom-tooltip">
-            {% if dod_available %}
-            <div class="text-[10px] text-da-gray-400 uppercase tracking-wider mb-1">前日比 ({{ dod_ref_date }})</div>
-            <div class="font-bold {% if dod_pnl_delta_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %} {% if mom_available %}mb-2{% endif %}">{% if dod_pnl_delta_num >= 0.0 %}+{% else %}-{% endif %}¥{{ dod_pnl_delta }}</div>
-            {% endif %}
-            {% if mom_available %}
-            {% if dod_available %}<div class="border-t border-da-gray-200 my-1 opacity-40"></div>{% endif %}
-            <div class="text-[10px] text-da-gray-400 uppercase tracking-wider mb-1">先月比 ({{ mom_ref_date }})</div>
-            <div class="font-bold {% if mom_pnl_delta_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}">{% if mom_pnl_delta_num >= 0.0 %}+{% else %}-{% endif %}¥{{ mom_pnl_delta }}</div>
-            {% endif %}
-        </div>
-        {% endif %}
-    </div>
-    <div class="da-card p-7 {% if cumulative_pnl_jpy_num >= 0.0 %}kpi-green{% else %}kpi-red{% endif %}">
-        <div class="text-sm font-bold text-da-gray-600 uppercase tracking-wider mb-4">累計損益</div>
-        <div class="text-4xl font-black leading-none tabular-nums {% if cumulative_pnl_jpy_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}">
+        </p>
+        <p class="mt-4 text-xs font-bold tabular-nums {% if total_unrealized_pnl_pct_num < 0.0 %}text-red-600{% else %}text-emerald-600{% endif %}">
+            {% if total_unrealized_pnl_pct_num >= 0.0 %}+{% endif %}{{ total_unrealized_pnl_pct }}%
+        </p>
+    </section>
+
+    <section class="metric-card da-card p-5 sm:p-6 {% if cumulative_pnl_jpy_num >= 0.0 %}kpi-green{% else %}kpi-red{% endif %} md:col-span-1 xl:col-span-2" aria-labelledby="portfolio-total-pnl-title">
+        <p class="text-[10px] font-bold tracking-[0.16em] text-da-gray-400 uppercase mb-3">Total return</p>
+        <h3 id="portfolio-total-pnl-title" class="text-sm font-bold text-da-gray-600">累計損益</h3>
+        <p class="metric-value mt-5 font-black leading-none tracking-tight tabular-nums {% if cumulative_pnl_jpy_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}">
             {% if cumulative_pnl_jpy_num >= 0.0 %}+{% else %}-{% endif %}¥{{ cumulative_pnl_jpy }}
-        </div>
-        <div class="mt-3 text-xs text-da-gray-500 tabular-nums">
-            うち実現&nbsp;<span class="font-semibold {% if realized_pnl_jpy_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}">{% if realized_pnl_jpy_num >= 0.0 %}+{% else %}-{% endif %}¥{{ realized_pnl_jpy }}</span>
-        </div>
-    </div>
+        </p>
+        <p class="mt-4 text-xs text-da-gray-500 tabular-nums">
+            実現済み <span class="font-bold {% if realized_pnl_jpy_num >= 0.0 %}text-emerald-600{% else %}text-red-600{% endif %}">{% if realized_pnl_jpy_num >= 0.0 %}+{% else %}-{% endif %}¥{{ realized_pnl_jpy }}</span>
+        </p>
+    </section>
 </div>
