@@ -38,10 +38,10 @@ pub async fn refresh_prices(
     );
     Ok((
         StatusCode::OK,
-        [("HX-Trigger", "refreshAll")],
         Json(json!({
             "ok": true,
             "updated_from_api": outcome.updated_from_api,
+            "external_update_attempted": outcome.external_update_attempted,
             "remaining_api_requests": outcome.remaining_api_requests,
         })),
     ))

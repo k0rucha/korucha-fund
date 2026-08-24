@@ -8,7 +8,7 @@ pub mod util;
 
 use anyhow::{Context, Result};
 use sqlx::SqlitePool;
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use std::io::BufRead;
 use std::str::FromStr;
 use tracing_subscriber::EnvFilter;
@@ -30,7 +30,11 @@ async fn main() -> Result<()> {
 
     let connect_options = SqliteConnectOptions::from_str(&config.database_url)
         .context("invalid database url")?
-        .create_if_missing(true);
+        .create_if_missing(true)
+        .journal_mode(SqliteJournalMode::Wal)
+        .synchronous(SqliteSynchronous::Normal)
+        .busy_timeout(std::time::Duration::from_secs(5))
+        .foreign_keys(true);
 
     let db = SqlitePoolOptions::new()
         .max_connections(5)
@@ -47,16 +51,13 @@ async fn main() -> Result<()> {
         config: std::sync::Arc::new(config),
         db,
         refresh_lock: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        transaction_lock: std::sync::Arc::new(tokio::sync::Mutex::new(())),
+        share_rate_limit: std::sync::Arc::new(tokio::sync::Mutex::new(None)),
     };
 
-    // Phase 8: Start the daily scheduler
-    let scheduler_db = state.db.clone();
-    let scheduler_cron = state.config.scheduler_cron.clone();
-    tokio::spawn(async move {
-        if let Err(e) = start_scheduler(&scheduler_db, &scheduler_cron).await {
-            tracing::error!("Scheduler failed to start: {}", e);
-        }
-    });
+    // Start before accepting traffic so an invalid schedule fails fast.
+    // Keep the handle alive for the lifetime of the HTTP server.
+    let mut scheduler = start_scheduler(&state.db, &state.config.scheduler_cron).await?;
 
     // Phase 9: Start a simple server-console command listener (stdin).
     // This accepts commands only from the server console, e.g. `backfill`.
@@ -77,6 +78,11 @@ async fn main() -> Result<()> {
         .with_graceful_shutdown(shutdown_signal())
         .await
         .context("server error")?;
+
+    scheduler
+        .shutdown()
+        .await
+        .context("failed to shut down scheduler")?;
 
     Ok(())
 }
@@ -144,7 +150,10 @@ async fn start_console_listener(pool: SqlitePool) {
     tracing::info!("Console command listener terminated");
 }
 
-async fn start_scheduler(pool: &SqlitePool, cron_expr: &str) -> Result<()> {
+async fn start_scheduler(
+    pool: &SqlitePool,
+    cron_expr: &str,
+) -> Result<tokio_cron_scheduler::JobScheduler> {
     use tokio_cron_scheduler::{Job, JobScheduler};
 
     let sched = JobScheduler::new()
@@ -152,7 +161,7 @@ async fn start_scheduler(pool: &SqlitePool, cron_expr: &str) -> Result<()> {
         .context("failed to create scheduler")?;
 
     let pool = pool.clone();
-    let job = Job::new_async(cron_expr, move |_uuid, _lock| {
+    let job = Job::new_async_tz(cron_expr, crate::util::jst(), move |_uuid, _lock| {
         let pool = pool.clone();
         Box::pin(async move {
             services::scheduler::run_daily_batch(&pool).await;
@@ -168,7 +177,7 @@ async fn start_scheduler(pool: &SqlitePool, cron_expr: &str) -> Result<()> {
     sched.start().await.context("failed to start scheduler")?;
 
     tracing::info!("Scheduler started with cron: {}", cron_expr);
-    Ok(())
+    Ok(sched)
 }
 
 async fn shutdown_signal() {

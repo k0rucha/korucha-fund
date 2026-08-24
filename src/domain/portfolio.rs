@@ -2,6 +2,10 @@ use std::collections::HashMap;
 
 use chrono::{NaiveDate, NaiveDateTime};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+const MAX_SYMBOL_CHARS: usize = 32;
+const MAX_NOTES_CHARS: usize = 1_000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
@@ -29,6 +33,160 @@ pub struct NewTransaction {
     pub txn_date: NaiveDate,
     pub fx_rate_to_jpy: Option<f64>,
     pub notes: Option<String>,
+}
+
+#[derive(Debug, Error, PartialEq)]
+pub enum TransactionValidationError {
+    #[error("銘柄シンボルを入力してください")]
+    EmptySymbol,
+    #[error("銘柄シンボルは{MAX_SYMBOL_CHARS}文字以内で入力してください")]
+    SymbolTooLong,
+    #[error("銘柄シンボルに使用できない文字が含まれています")]
+    InvalidSymbol,
+    #[error("取引タイプはBUYまたはSELLを指定してください")]
+    InvalidTransactionType,
+    #[error("数量は0より大きい有限の数値を指定してください")]
+    InvalidQuantity,
+    #[error("単価は0より大きい有限の数値を指定してください")]
+    InvalidPrice,
+    #[error("通貨はJPYまたはUSDを指定してください")]
+    InvalidCurrency,
+    #[error("手数料は0以上の有限の数値を指定してください")]
+    InvalidFee,
+    #[error("USD取引には0より大きいUSD/JPY換算レートが必要です")]
+    InvalidFxRate,
+    #[error("メモは{MAX_NOTES_CHARS}文字以内で入力してください")]
+    NotesTooLong,
+}
+
+#[derive(Debug, Error, PartialEq)]
+pub enum LedgerValidationError {
+    #[error("取引ID {id} の種別が不正です")]
+    InvalidTransactionType { id: i64 },
+    #[error("{symbol} の取引通貨が混在しています（{expected} と {actual}）")]
+    CurrencyMismatch {
+        symbol: String,
+        expected: String,
+        actual: String,
+    },
+    #[error("{symbol} の売却数 {requested} が約定日時点の保有数 {available} を超えています")]
+    InsufficientQuantity {
+        symbol: String,
+        available: f64,
+        requested: f64,
+    },
+}
+
+impl NewTransaction {
+    /// Normalize user/imported input and enforce the invariants expected by
+    /// portfolio calculations. Keeping this at the domain boundary ensures
+    /// every write path applies the same rules.
+    pub fn normalized(mut self) -> Result<Self, TransactionValidationError> {
+        self.symbol = normalize_symbol(&self.symbol)?;
+        self.txn_type = self.txn_type.trim().to_ascii_uppercase();
+        self.currency = self.currency.trim().to_ascii_uppercase();
+        self.notes = self
+            .notes
+            .take()
+            .map(|notes| notes.trim().to_string())
+            .filter(|notes| !notes.is_empty());
+
+        if !matches!(self.txn_type.as_str(), "BUY" | "SELL") {
+            return Err(TransactionValidationError::InvalidTransactionType);
+        }
+        if !self.quantity.is_finite() || self.quantity <= 0.0 {
+            return Err(TransactionValidationError::InvalidQuantity);
+        }
+        if !self.price.is_finite() || self.price <= 0.0 {
+            return Err(TransactionValidationError::InvalidPrice);
+        }
+        if !self.fee.is_finite() || self.fee < 0.0 {
+            return Err(TransactionValidationError::InvalidFee);
+        }
+        if !matches!(self.currency.as_str(), "JPY" | "USD") {
+            return Err(TransactionValidationError::InvalidCurrency);
+        }
+        if self.currency == "USD"
+            && !self
+                .fx_rate_to_jpy
+                .is_some_and(|rate| rate.is_finite() && rate > 0.0)
+        {
+            return Err(TransactionValidationError::InvalidFxRate);
+        }
+        // An FX rate on a JPY transaction is meaningless and previously made
+        // the calculation multiply yen values by that rate. Canonicalize it.
+        if self.currency == "JPY" {
+            self.fx_rate_to_jpy = None;
+        }
+        if self
+            .notes
+            .as_ref()
+            .is_some_and(|notes| notes.chars().count() > MAX_NOTES_CHARS)
+        {
+            return Err(TransactionValidationError::NotesTooLong);
+        }
+
+        Ok(self)
+    }
+}
+
+pub fn normalize_symbol(symbol: &str) -> Result<String, TransactionValidationError> {
+    let symbol = symbol.trim().to_ascii_uppercase();
+    if symbol.is_empty() {
+        return Err(TransactionValidationError::EmptySymbol);
+    }
+    if symbol.chars().count() > MAX_SYMBOL_CHARS {
+        return Err(TransactionValidationError::SymbolTooLong);
+    }
+    if !symbol.chars().all(|character| {
+        character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '^' | '=' | '_')
+    }) {
+        return Err(TransactionValidationError::InvalidSymbol);
+    }
+    Ok(symbol)
+}
+
+/// Validate constraints that depend on the complete chronological ledger.
+/// This is intentionally separate from per-row validation: inserting a
+/// backdated sale or deleting an old buy can invalidate later transactions.
+pub fn validate_transaction_ledger(
+    transactions: &[Transaction],
+) -> Result<(), LedgerValidationError> {
+    let mut ordered: Vec<_> = transactions.iter().collect();
+    ordered.sort_by_key(|transaction| (transaction.txn_date, transaction.id));
+    let mut balances = HashMap::<String, (String, f64)>::new();
+
+    for transaction in ordered {
+        if !matches!(transaction.txn_type.as_str(), "BUY" | "SELL") {
+            return Err(LedgerValidationError::InvalidTransactionType { id: transaction.id });
+        }
+        let entry = balances
+            .entry(transaction.symbol.clone())
+            .or_insert_with(|| (transaction.currency.clone(), 0.0));
+        if entry.0 != transaction.currency {
+            return Err(LedgerValidationError::CurrencyMismatch {
+                symbol: transaction.symbol.clone(),
+                expected: entry.0.clone(),
+                actual: transaction.currency.clone(),
+            });
+        }
+
+        if transaction.txn_type == "BUY" {
+            entry.1 += transaction.quantity;
+        } else {
+            let tolerance = f64::EPSILON * entry.1.abs().max(transaction.quantity.abs()) * 8.0;
+            if transaction.quantity - entry.1 > tolerance {
+                return Err(LedgerValidationError::InsufficientQuantity {
+                    symbol: transaction.symbol.clone(),
+                    available: entry.1,
+                    requested: transaction.quantity,
+                });
+            }
+            entry.1 = (entry.1 - transaction.quantity).max(0.0);
+        }
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
@@ -153,6 +311,13 @@ pub fn value_portfolio(
     prices: &HashMap<String, f64>,
     usd_jpy: Option<f64>,
 ) -> Option<Portfolio> {
+    if analysis.holdings.iter().any(|holding| {
+        !prices
+            .get(&holding.symbol)
+            .is_some_and(|price| price.is_finite() && *price > 0.0)
+    }) {
+        return None;
+    }
     if usd_jpy.is_none()
         && analysis
             .holdings
@@ -168,7 +333,7 @@ pub fn value_portfolio(
     let mut holdings = Vec::with_capacity(analysis.holdings.len());
 
     for holding in analysis.holdings {
-        let current_price_native = prices.get(&holding.symbol).copied().unwrap_or(0.0);
+        let current_price_native = prices[&holding.symbol];
         let fx_rate = if holding.currency == "USD" {
             usd_jpy
         } else {
@@ -258,5 +423,86 @@ mod tests {
         assert_eq!(portfolio.total_value_jpy, 315_000.0);
         assert_eq!(portfolio.unrealized_pnl_jpy, 67_500.0);
         assert!(value_portfolio(analysis, &prices, None).is_none());
+    }
+
+    #[test]
+    fn valuation_requires_a_valid_price_for_every_holding() {
+        let analysis = analyze_transactions(&[transaction(1, "BUY", 10.0, 100.0)]);
+
+        assert!(value_portfolio(analysis.clone(), &HashMap::new(), Some(150.0)).is_none());
+        assert!(
+            value_portfolio(
+                analysis,
+                &HashMap::from([("AAPL".into(), f64::NAN)]),
+                Some(150.0)
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn normalizes_and_validates_transaction_input() {
+        let normalized = NewTransaction {
+            symbol: " aapl ".into(),
+            txn_type: " buy ".into(),
+            quantity: 1.0,
+            price: 100.0,
+            currency: " usd ".into(),
+            fee: 0.0,
+            txn_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+            fx_rate_to_jpy: Some(150.0),
+            notes: Some(" memo ".into()),
+        }
+        .normalized()
+        .unwrap();
+
+        assert_eq!(normalized.symbol, "AAPL");
+        assert_eq!(normalized.txn_type, "BUY");
+        assert_eq!(normalized.currency, "USD");
+        assert_eq!(normalized.notes.as_deref(), Some("memo"));
+
+        let mut invalid = normalized;
+        invalid.quantity = f64::NAN;
+        assert_eq!(
+            invalid.normalized().unwrap_err(),
+            TransactionValidationError::InvalidQuantity
+        );
+    }
+
+    #[test]
+    fn ignores_fx_rate_for_jpy_transactions() {
+        let transaction = NewTransaction {
+            symbol: "7203.t".into(),
+            txn_type: "BUY".into(),
+            quantity: 1.0,
+            price: 3_000.0,
+            currency: "JPY".into(),
+            fee: 0.0,
+            txn_date: NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+            fx_rate_to_jpy: Some(150.0),
+            notes: None,
+        }
+        .normalized()
+        .unwrap();
+
+        assert_eq!(transaction.symbol, "7203.T");
+        assert_eq!(transaction.fx_rate_to_jpy, None);
+    }
+
+    #[test]
+    fn ledger_rejects_overselling_and_mixed_currencies() {
+        let buy = transaction(1, "BUY", 10.0, 100.0);
+        let oversell = transaction(2, "SELL", 11.0, 110.0);
+        assert!(matches!(
+            validate_transaction_ledger(&[buy.clone(), oversell]),
+            Err(LedgerValidationError::InsufficientQuantity { .. })
+        ));
+
+        let mut mixed_currency = transaction(2, "BUY", 1.0, 110.0);
+        mixed_currency.currency = "JPY".into();
+        assert!(matches!(
+            validate_transaction_ledger(&[buy, mixed_currency]),
+            Err(LedgerValidationError::CurrencyMismatch { .. })
+        ));
     }
 }

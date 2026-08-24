@@ -9,7 +9,12 @@ pub async fn latest_close(symbol: &str) -> anyhow::Result<(f64, NaiveDate)> {
     let provider = yahoo::YahooConnector::new()?;
     let response = provider.get_latest_quotes(symbol, "1d").await?;
     let quote = response.last_quote()?;
-    let date = timestamp_to_jst_date(quote.timestamp as i64)
+    anyhow::ensure!(
+        quote.close.is_finite() && quote.close > 0.0,
+        "invalid close price for {symbol}: {}",
+        quote.close
+    );
+    let date = timestamp_to_jst_date(quote.timestamp)
         .ok_or_else(|| anyhow::anyhow!("invalid timestamp: {}", quote.timestamp))?;
     Ok((quote.close, date))
 }
@@ -48,7 +53,7 @@ pub async fn daily_closes(symbol: &str, start: NaiveDate) -> anyhow::Result<Vec<
     Ok(response
         .quotes()?
         .into_iter()
-        .filter(|quote| quote.close.is_finite() && quote.close != 0.0)
+        .filter(|quote| quote.close.is_finite() && quote.close > 0.0)
         .filter_map(|quote| timestamp_to_jst_date(quote.timestamp).map(|date| (date, quote.close)))
         .collect())
 }

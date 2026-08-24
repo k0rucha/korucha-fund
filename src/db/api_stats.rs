@@ -1,5 +1,5 @@
-use sqlx::SqlitePool;
 use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, TimeZone};
+use sqlx::SqlitePool;
 
 use crate::util::{jst, jst_today};
 
@@ -126,30 +126,6 @@ pub async fn try_record_api_request(pool: &SqlitePool) -> sqlx::Result<bool> {
     .await?;
 
     Ok(result.rows_affected() > 0)
-}
-
-/// Force-record a request without rate-limit checks.
-/// Used by the daily scheduler, which is expected to run on cron and should
-/// not be gated by the limiter.
-pub async fn record_api_request_forced(pool: &SqlitePool) -> sqlx::Result<()> {
-    ensure_stats_for_today(pool).await?;
-
-    let today = jst_today();
-    let now_str = jst_now().format("%Y-%m-%d %H:%M:%S").to_string();
-
-    sqlx::query(
-        r#"
-        UPDATE api_request_stats
-        SET last_request_time = ?, request_count = request_count + 1
-        WHERE reset_date = ?
-        "#,
-    )
-    .bind(&now_str)
-    .bind(today)
-    .execute(pool)
-    .await?;
-
-    Ok(())
 }
 
 pub async fn requests_remaining(pool: &SqlitePool) -> sqlx::Result<i64> {

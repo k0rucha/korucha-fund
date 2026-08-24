@@ -1,0 +1,10 @@
+{
+  "name": "korucha-fund-frontend",
+  "private": true,
+  "scripts": {
+    "css": "tailwindcss -i ./static/input.css -o ./static/app.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "3.4.17"
+  }
+}

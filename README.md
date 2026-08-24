@@ -5,7 +5,7 @@
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/k0rucha/korucha-fund)
 
 - **フロントページ** — 保有銘柄・損益・時系列グラフを公開表示
-- **管理画面** (`/admin`) — 取引履歴の追加・削除・CSV インポート/エクスポート（Basic Auth 保護）
+- **管理画面** (`/admin`) — 取引履歴の追加・削除・JSON インポート/エクスポート（Basic Auth 保護）
 - **シェアカード** — ポートフォリオや個別銘柄のスナップショットを OGP 付きで共有
 - **テーマ切り替え** — ヘッダーから「モダン」と「Windows 95 風」レトロUIを切り替え（選択は `localStorage` に保存）
 - **自動バッチ** — JST 23:00 に Yahoo Finance から終値を取得してスナップショットを更新
@@ -25,7 +25,8 @@
 
 ### 必要なもの
 
-- Rust 1.85+（`cargo`）
+- Rust 1.94+（`cargo`、SQLx 0.9 の最低要件）
+- Node.js / npm（CSSクラスを変更して `static/app.css` を再生成する場合のみ）
 - SQLite（ランタイム依存なし。sqlx がビルド時に `.sqlx/` を参照）
 
 ### 手順
@@ -44,6 +45,36 @@ cargo run
 
 ブラウザで `http://localhost:3000` を開く。
 
+## systemdで自動起動（ユーザーサービス）
+
+releaseバイナリをビルドし、DB・秘密設定・静的資産を`target`の外へ配置します。
+
+```bash
+cargo build --release
+install -d -m 700 ~/.config/korucha-fund ~/.local/share/korucha-fund/static ~/.config/systemd/user
+install -m 600 .env ~/.config/korucha-fund/korucha-fund.env
+cp -a static/. ~/.local/share/korucha-fund/static/
+install -m 644 deploy/korucha-fund.service ~/.config/systemd/user/korucha-fund.service
+
+# 既存DBがリポジトリ直下にある場合は、初回起動前にコピー
+if [ -f korucha-fund.db ] && [ ! -e ~/.local/share/korucha-fund/korucha-fund.db ]; then
+  install -m 600 korucha-fund.db ~/.local/share/korucha-fund/korucha-fund.db
+fi
+
+systemctl --user daemon-reload
+systemctl --user enable --now korucha-fund.service
+loginctl enable-linger "$USER"
+```
+
+状態とログは次のコマンドで確認できます。
+
+```bash
+systemctl --user status korucha-fund.service
+journalctl --user -u korucha-fund.service -f
+```
+
+更新時は`cargo build --release`と静的資産のコピー後に`systemctl --user restart korucha-fund.service`を実行します。
+
 ## 環境変数
 
 `.env.example` を参照。
@@ -54,7 +85,8 @@ cargo run
 | `ADMIN_USER` | ○ | Basic Auth ユーザー名 | — |
 | `ADMIN_PASS` | ○ | Basic Auth パスワード | — |
 | `PORT` | — | リッスンポート | `3000` |
-| `SCHEDULER_CRON` | — | 終値取得バッチの cron 式（UTC） | `0 0 23 * * *` |
+| `PUBLIC_BASE_URL` | — | OGP URL・書き込み元検証に使う公開URL（パスなし） | `https://fund.korucha.com` |
+| `SCHEDULER_CRON` | — | 終値取得バッチの6フィールド cron 式（JST） | `0 0 23 * * *` |
 
 ## コマンド
 
@@ -62,6 +94,7 @@ cargo run
 cargo run                    # 開発サーバー起動
 cargo test                   # テスト実行
 cargo build --release        # リリースビルド
+npm ci && npm run css        # Tailwind CSS を再生成
 
 # Linux aarch64 向けクロスコンパイル（cross が必要）
 SQLX_OFFLINE=true cross build --release --target aarch64-unknown-linux-gnu

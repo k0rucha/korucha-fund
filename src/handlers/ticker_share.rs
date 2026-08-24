@@ -7,17 +7,17 @@ use askama::Template;
 use axum::{
     Json,
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::db::{prices, ticker_share_cards};
+use crate::domain::portfolio::normalize_symbol;
 use crate::handlers::AppState;
-use crate::handlers::error::{AppError, AppResult};
 use crate::handlers::share::base_url;
+use crate::handlers::share::create_card_error_response;
 use crate::handlers::template_response::TemplateResponse;
-use crate::services::portfolio::DISPLAY_USD_JPY_FALLBACK;
 use crate::services::share_cards as share_service;
 use crate::util::{format_with_commas, jst, jst_today, signed_pct};
 
@@ -40,10 +40,18 @@ pub struct CreateTickerShareResponse {
 pub async fn create_ticker_share_card(
     State(state): State<AppState>,
     Query(q): Query<CreateTickerShareQuery>,
-) -> AppResult<impl IntoResponse> {
-    let id = share_service::create_ticker_card(&state.db, &q.symbol, q.span.as_deref())
+) -> Result<impl IntoResponse, (StatusCode, String)> {
+    let symbol = normalize_symbol(&q.symbol)
+        .map_err(|error| (StatusCode::BAD_REQUEST, error.to_string()))?;
+    if !crate::handlers::claim_share_creation(&state).await {
+        return Err((
+            StatusCode::TOO_MANY_REQUESTS,
+            "共有カードの連続発行はできません。少し待ってから再試行してください".into(),
+        ));
+    }
+    let id = share_service::create_ticker_card(&state.db, &symbol, q.span.as_deref())
         .await
-        .map_err(AppError::Other)?;
+        .map_err(create_card_error_response)?;
     let url = format!("/ticker/{}", id);
     Ok(Json(CreateTickerShareResponse { id, url }))
 }
@@ -63,6 +71,7 @@ pub struct TickerShareTemplate {
     pub issue_price_native: String,
     pub issue_price_native_num: f64,
     pub issue_price_jpy: String, // for USD tickers, ¥ form too
+    pub issue_price_jpy_available: bool,
 
     // Optional position info (empty/zero strings when not held).
     pub has_position: bool,
@@ -96,7 +105,6 @@ pub struct TickerShareTemplate {
 pub async fn view_ticker_share_card(
     State(state): State<AppState>,
     Path(id): Path<String>,
-    headers: HeaderMap,
 ) -> Result<impl IntoResponse, StatusCode> {
     let card = ticker_share_cards::get_ticker_share_card(&state.db, &id)
         .await
@@ -116,7 +124,10 @@ pub async fn view_ticker_share_card(
     // Current price (today's most recent close on or before today).
     let current_price = prices::get_price_on_or_before(&state.db, &card.symbol, today)
         .await
-        .unwrap_or(None)
+        .map_err(|error| {
+            tracing::error!(%error, "failed to load current ticker price");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?
         .unwrap_or(card.issue_price_native);
 
     let price_delta = current_price - card.issue_price_native;
@@ -141,17 +152,21 @@ pub async fn view_ticker_share_card(
 
     // Issue price expressed in JPY (matches the JST display convention).
     let issue_price_jpy_num = if card.currency == "USD" {
-        let fx = card.fx_rate_at_issue.unwrap_or(DISPLAY_USD_JPY_FALLBACK);
-        card.issue_price_native * fx
+        card.fx_rate_at_issue
+            .filter(|rate| rate.is_finite() && *rate > 0.0)
+            .map(|rate| card.issue_price_native * rate)
     } else {
-        card.issue_price_native
+        Some(card.issue_price_native)
     };
 
     // Chart data: every cached close for `symbol` up through the issue date.
     // JS slices by span on the client.
     let history = prices::list_history(&state.db, &card.symbol, issue_date)
         .await
-        .unwrap_or_default();
+        .map_err(|error| {
+            tracing::error!(%error, "failed to load ticker history");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     let history_dates: Vec<String> = history.iter().map(|(d, _)| d.to_string()).collect();
     let history_prices: Vec<f64> = history.iter().map(|(_, p)| *p).collect();
 
@@ -162,7 +177,7 @@ pub async fn view_ticker_share_card(
         format!("{} ({})", display_name, card.symbol)
     };
 
-    let base = base_url(&headers);
+    let base = base_url(&state);
     let og_url = format!("{}/ticker/{}", base, card.id);
     let og_image_url = format!("{}/ticker/{}/ogp.png", base, card.id);
     let unit = if card.currency == "USD" { "$" } else { "¥" };
@@ -205,7 +220,10 @@ pub async fn view_ticker_share_card(
 
         issue_price_native: format_with_commas(card.issue_price_native),
         issue_price_native_num: card.issue_price_native,
-        issue_price_jpy: format_with_commas(issue_price_jpy_num),
+        issue_price_jpy: issue_price_jpy_num
+            .map(format_with_commas)
+            .unwrap_or_default(),
+        issue_price_jpy_available: issue_price_jpy_num.is_some(),
 
         has_position,
         quantity: card
@@ -233,8 +251,14 @@ pub async fn view_ticker_share_card(
         price_delta_native_num: price_delta,
         price_delta_pct: signed_pct(price_delta_pct),
 
-        history_dates_json: serde_json::to_string(&history_dates).unwrap_or_else(|_| "[]".into()),
-        history_prices_json: serde_json::to_string(&history_prices).unwrap_or_else(|_| "[]".into()),
+        history_dates_json: serde_json::to_string(&history_dates).map_err(|error| {
+            tracing::error!(%error, "failed to encode ticker history dates");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?,
+        history_prices_json: serde_json::to_string(&history_prices).map_err(|error| {
+            tracing::error!(%error, "failed to encode ticker history prices");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?,
         default_span: card.default_span,
 
         og_url,

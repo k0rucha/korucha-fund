@@ -1,5 +1,5 @@
-use sqlx::{SqlitePool, FromRow};
 use chrono::NaiveDateTime;
+use sqlx::{FromRow, SqlitePool};
 
 #[derive(Debug, FromRow, Clone)]
 pub struct TickerShareCard {

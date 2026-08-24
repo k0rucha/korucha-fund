@@ -8,13 +8,13 @@ use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
 use crate::handlers::AppState;
 
-pub async fn basic_auth(
-    State(state): State<AppState>,
-    request: Request,
-    next: Next,
-) -> Response {
+pub async fn basic_auth(State(state): State<AppState>, request: Request, next: Next) -> Response {
     if check_credentials(&request, &state.config.admin_user, &state.config.admin_pass) {
-        next.run(request).await
+        let mut response = next.run(request).await;
+        response
+            .headers_mut()
+            .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+        response
     } else {
         unauthorized()
     }
@@ -27,9 +27,12 @@ fn check_credentials(request: &Request, expected_user: &str, expected_pass: &str
     let Ok(value) = header_value.to_str() else {
         return false;
     };
-    let Some(encoded) = value.strip_prefix("Basic ") else {
+    let Some((scheme, encoded)) = value.split_once(' ') else {
         return false;
     };
+    if !scheme.eq_ignore_ascii_case("basic") {
+        return false;
+    }
     let Ok(decoded_bytes) = BASE64.decode(encoded.trim()) else {
         return false;
     };
@@ -49,5 +52,8 @@ fn unauthorized() -> Response {
         header::WWW_AUTHENTICATE,
         HeaderValue::from_static("Basic realm=\"korucha-fund admin\", charset=\"UTF-8\""),
     );
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
 }

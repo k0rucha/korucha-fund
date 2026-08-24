@@ -48,7 +48,12 @@
             </div>
             {% if currency == "USD" %}
             <div class="text-sm text-da-gray-600">
-                JPY 換算: <span class="font-bold text-da-gray-800 tabular-nums">¥{{ issue_price_jpy }}</span>
+                JPY 換算:
+                {% if issue_price_jpy_available %}
+                <span class="font-bold text-da-gray-800 tabular-nums">¥{{ issue_price_jpy }}</span>
+                {% else %}
+                <span class="font-bold text-amber-700">発行時の為替データなし</span>
+                {% endif %}
             </div>
             {% endif %}
         </div>
@@ -86,14 +91,14 @@
         <div class="mb-10">
             <div class="flex justify-between items-center mb-4 flex-wrap gap-3">
                 <div class="text-xs font-bold text-da-gray-600 uppercase tracking-widest">発行時までの価格推移</div>
-                <div class="inline-flex border border-da-gray-200 rounded overflow-hidden text-xs font-bold" id="tickerSpanToggle">
-                    <button data-span="all" class="ts-span-btn px-4 py-2 transition-colors">全期間</button>
-                    <button data-span="30d" class="ts-span-btn px-4 py-2 transition-colors border-l border-da-gray-200">30日</button>
-                    <button data-span="7d" class="ts-span-btn px-4 py-2 transition-colors border-l border-da-gray-200">7日</button>
+                <div class="inline-flex border border-da-gray-200 rounded overflow-hidden text-xs font-bold" id="tickerSpanToggle" role="group" aria-label="チャートの表示期間">
+                    <button type="button" data-span="all" class="ts-span-btn px-4 py-2 transition-colors" aria-pressed="false">全期間</button>
+                    <button type="button" data-span="30d" class="ts-span-btn px-4 py-2 transition-colors border-l border-da-gray-200" aria-pressed="false">30日</button>
+                    <button type="button" data-span="7d" class="ts-span-btn px-4 py-2 transition-colors border-l border-da-gray-200" aria-pressed="false">7日</button>
                 </div>
             </div>
             <div class="relative" style="height: 280px;">
-                <canvas id="tickerChart"></canvas>
+                <canvas id="tickerChart" role="img" aria-label="発行時までの銘柄価格の推移"></canvas>
             </div>
         </div>
 
@@ -122,7 +127,7 @@
             class="text-da-blue-900 hover:text-da-blue-600 text-sm font-bold transition-colors">
             このページのURLをコピー
         </button>
-        <span id="copyTickerUrlMsg" class="text-emerald-600 text-sm font-bold ml-3 hidden">コピーしました</span>
+        <span id="copyTickerUrlMsg" class="text-emerald-600 text-sm font-bold ml-3 hidden" role="status">コピーしました</span>
     </div>
 </div>
 
@@ -225,8 +230,9 @@
     const spanBtns = document.querySelectorAll('#tickerSpanToggle .ts-span-btn');
     function setActive(span) {
         spanBtns.forEach(b => {
-            if (b.dataset.span === span) b.classList.add('active');
-            else b.classList.remove('active');
+            const active = b.dataset.span === span;
+            b.classList.toggle('active', active);
+            b.setAttribute('aria-pressed', String(active));
         });
     }
     spanBtns.forEach(b => {
@@ -244,9 +250,13 @@
     const copyBtn = document.getElementById('copyTickerUrlBtn');
     const copyMsg = document.getElementById('copyTickerUrlMsg');
     copyBtn.addEventListener('click', () => {
-        navigator.clipboard.writeText(location.href).then(() => {
+        window.copyText(location.href).then(() => {
             copyMsg.classList.remove('hidden');
             setTimeout(() => copyMsg.classList.add('hidden'), 2000);
+        }).catch(() => {
+            copyMsg.textContent = 'コピーできませんでした';
+            copyMsg.classList.remove('hidden', 'text-emerald-600');
+            copyMsg.classList.add('text-red-600');
         });
     });
 })();

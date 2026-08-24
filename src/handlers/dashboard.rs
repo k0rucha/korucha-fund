@@ -75,6 +75,8 @@ pub struct DashboardTemplate {
     pub mom_pnl_delta_num: f64,
     pub mom_pnl_pct_delta: String,
     pub mom_pnl_pct_delta_num: f64,
+    pub fallback_price_symbols: String,
+    pub fallback_fx_rate: bool,
 }
 
 pub async fn dashboard_index(
@@ -146,6 +148,7 @@ pub async fn dashboard_index(
         mom_pnl_pct_delta_num,
     ) = unpack_change(data.month);
     let portfolio = data.portfolio;
+    let fallback_price_symbols = data.fallback_price_symbols.join(", ");
 
     Ok(TemplateResponse(DashboardTemplate {
         holdings: holding_views,
@@ -183,6 +186,8 @@ pub async fn dashboard_index(
         realized_pnl_jpy_num: portfolio.realized_pnl_jpy,
         cumulative_pnl_jpy: format_with_commas(data.cumulative_pnl_jpy.abs()),
         cumulative_pnl_jpy_num: data.cumulative_pnl_jpy,
+        fallback_price_symbols,
+        fallback_fx_rate: data.fallback_fx_rate,
     }))
 }
 

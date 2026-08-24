@@ -21,7 +21,11 @@ fn main() {
         .chars()
         .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | '+'))
         .collect();
-    let safe = if safe.is_empty() { "dev".to_string() } else { safe };
+    let safe = if safe.is_empty() {
+        "dev".to_string()
+    } else {
+        safe
+    };
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let out_path = manifest_dir.join("templates/partials/_version.html");
@@ -41,6 +45,7 @@ fn main() {
     println!("cargo:rerun-if-changed=.git/refs/tags");
     println!("cargo:rerun-if-changed=.git/packed-refs");
     println!("cargo:rerun-if-env-changed=BUILD_VERSION");
+    println!("cargo:rerun-if-changed=migrations");
 }
 
 fn git_describe() -> Option<String> {

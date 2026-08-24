@@ -1,6 +1,7 @@
 # Rust build output
 /target
 **/target/
+/node_modules/
 
 # Environment / secrets
 /.env

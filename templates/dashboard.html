@@ -266,6 +266,17 @@
         </p>
     </div>
 
+    {% if !fallback_price_symbols.is_empty() || fallback_fx_rate %}
+    <aside class="da-card mb-6 border-amber-300 bg-amber-50 p-4 text-sm text-amber-900" role="status">
+        <p class="font-bold">一部の市場データを取得中です</p>
+        <p class="mt-1 text-xs leading-relaxed">
+            {% if !fallback_price_symbols.is_empty() %}{{ fallback_price_symbols }} は最新取引単価、{% endif %}
+            {% if fallback_fx_rate %}USD/JPY は直近取引時レート{% endif %}
+            を一時的に使用しています。更新後に最新値へ切り替わります。
+        </p>
+    </aside>
+    {% endif %}
+
     <!-- KPI Tiles -->
     <div id="kpi-tiles" class="mb-8">
         {% include "partials/kpi_tiles.html" %}
@@ -320,11 +331,12 @@
 <script>
     // 日付をJST形式でフォーマットする関数
     function formatDateJST(dateStr) {
-        const date = new Date(dateStr + 'T00:00:00Z');
+        const date = new Date(dateStr + 'T00:00:00+09:00');
         return new Intl.DateTimeFormat('ja-JP', {
             year: 'numeric',
             month: '2-digit',
-            day: '2-digit'
+            day: '2-digit',
+            timeZone: 'Asia/Tokyo'
         }).format(date).replace(/\//g, '/');
     }
 
@@ -401,7 +413,10 @@
 
     // --- Composition Doughnut Chart ---
     fetch('/fragment/composition')
-        .then(r => r.json())
+        .then(r => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.json();
+        })
         .then(data => {
             const ctx = document.getElementById('compositionChart').getContext('2d');
             const legendEl = document.getElementById('compositionLegend');
@@ -409,19 +424,30 @@
             const total = data.values.reduce((a, b) => a + b, 0);
             document.getElementById('compositionCount').textContent = data.labels.length;
             const COLLAPSED_COUNT = 5;
-            legendEl.innerHTML = data.labels.map((label, i) => {
+            const legendItems = data.labels.map((label, i) => {
                 const color = chartColors[i % chartColors.length];
                 const pct = total > 0 ? ((data.values[i] / total) * 100).toFixed(1) : '0.0';
                 const fullName = (data.full_names && data.full_names[i]) ? data.full_names[i] : label;
-                const hidden = i >= COLLAPSED_COUNT ? 'data-extra="1" style="display:none;"' : '';
-                return `
-                    <li class="flex items-center gap-3" title="${fullName}" ${hidden}>
-                        <span class="inline-block w-3 h-3 rounded-sm flex-shrink-0" style="background-color: ${color};"></span>
-                        <span class="flex-1 truncate text-da-gray-800">${label}</span>
-                        <span class="text-da-gray-600 tabular-nums">${pct}%</span>
-                    </li>
-                `;
-            }).join('');
+                const item = document.createElement('li');
+                item.className = 'flex items-center gap-3';
+                item.title = String(fullName);
+                if (i >= COLLAPSED_COUNT) {
+                    item.dataset.extra = '1';
+                    item.classList.add('hidden');
+                }
+                const swatch = document.createElement('span');
+                swatch.className = 'inline-block w-3 h-3 rounded-sm flex-shrink-0';
+                swatch.style.backgroundColor = color;
+                const name = document.createElement('span');
+                name.className = 'flex-1 truncate text-da-gray-800';
+                name.textContent = String(label);
+                const percentage = document.createElement('span');
+                percentage.className = 'text-da-gray-600 tabular-nums';
+                percentage.textContent = pct + '%';
+                item.append(swatch, name, percentage);
+                return item;
+            });
+            legendEl.replaceChildren(...legendItems);
             if (data.labels.length > COLLAPSED_COUNT) {
                 const hiddenCount = data.labels.length - COLLAPSED_COUNT;
                 toggleBtn.classList.remove('hidden');
@@ -430,7 +456,7 @@
                 toggleBtn.addEventListener('click', () => {
                     expanded = !expanded;
                     legendEl.querySelectorAll('li[data-extra]').forEach(li => {
-                        li.style.display = expanded ? '' : 'none';
+                        li.classList.toggle('hidden', !expanded);
                     });
                     toggleBtn.textContent = expanded ? '折りたたむ' : `もっと見る (+${hiddenCount})`;
                 });
@@ -484,11 +510,22 @@
                     },
                 },
             });
+        })
+        .catch(error => {
+            console.error('Failed to load composition:', error);
+            document.getElementById('compositionCount').textContent = '—';
+            const message = document.createElement('li');
+            message.className = 'text-sm text-red-600';
+            message.textContent = '資産構成を読み込めませんでした';
+            document.getElementById('compositionLegend').replaceChildren(message);
         });
 
     // --- Timeseries Line Chart ---
     fetch('/fragment/timeseries')
-        .then(r => r.json())
+        .then(r => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return r.json();
+        })
         .then(data => {
             const ctx = document.getElementById('timeseriesChart').getContext('2d');
             if (data.dates.length === 0) {
@@ -627,6 +664,16 @@
                     });
                 });
             });
+        })
+        .catch(error => {
+            console.error('Failed to load timeseries:', error);
+            const canvas = document.getElementById('timeseriesChart');
+            const ctx = canvas.getContext('2d');
+            ctx.font = '14px sans-serif';
+            ctx.fillStyle = '#dc2626';
+            ctx.textAlign = 'center';
+            ctx.fillText('時系列データを読み込めませんでした', canvas.width / 2, canvas.height / 2);
+            document.querySelectorAll('#timeseriesRange button').forEach(button => button.disabled = true);
         });
 </script>
 {% endblock %}

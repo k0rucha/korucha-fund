@@ -51,11 +51,20 @@ jobs:
 
       - name: Package (Linux / macOS)
         if: runner.os != 'Windows'
-        run: tar -czf "${{ matrix.asset_name }}" -C "target/${{ matrix.target }}/release" "${{ matrix.artifact_name }}"
+        run: |
+          mkdir release-bundle
+          cp "target/${{ matrix.target }}/release/${{ matrix.artifact_name }}" release-bundle/
+          cp -R static README.md .env.example release-bundle/
+          tar -czf "${{ matrix.asset_name }}" -C release-bundle .
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
-        run: Compress-Archive -Path "target/${{ matrix.target }}/release/${{ matrix.artifact_name }}" -DestinationPath "${{ matrix.asset_name }}"
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release-bundle
+          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.artifact_name }}" release-bundle/
+          Copy-Item static, README.md, .env.example -Destination release-bundle/ -Recurse
+          Compress-Archive -Path "release-bundle/*" -DestinationPath "${{ matrix.asset_name }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7

@@ -1,5 +1,5 @@
-use axum::{extract::State, response::IntoResponse};
 use askama::Template;
+use axum::{extract::State, response::IntoResponse};
 
 use crate::handlers::AppState;
 use crate::handlers::template_response::TemplateResponse;

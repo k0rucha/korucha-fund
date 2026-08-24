@@ -1,4 +1,4 @@
-use sqlx::{SqlitePool, FromRow};
+use sqlx::{FromRow, SqlitePool};
 
 #[derive(Debug, FromRow, Clone)]
 pub struct Symbol {
@@ -9,29 +9,34 @@ pub struct Symbol {
 }
 
 pub async fn get_symbol_names(pool: &SqlitePool) -> Result<Vec<Symbol>, sqlx::Error> {
-    sqlx::query_as::<_, Symbol>(
-        "SELECT symbol, name, currency, exchange FROM symbols"
-    )
-    .fetch_all(pool)
-    .await
+    sqlx::query_as::<_, Symbol>("SELECT symbol, name, currency, exchange FROM symbols")
+        .fetch_all(pool)
+        .await
 }
 
-pub async fn get_symbol_name(pool: &SqlitePool, symbol: &str) -> Result<Option<String>, sqlx::Error> {
-    let row: Option<(Option<String>,)> = sqlx::query_as(
-        "SELECT name FROM symbols WHERE symbol = ?"
-    )
-    .bind(symbol)
-    .fetch_optional(pool)
-    .await?;
+pub async fn get_symbol_name(
+    pool: &SqlitePool,
+    symbol: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let row: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT name FROM symbols WHERE symbol = ?")
+            .bind(symbol)
+            .fetch_optional(pool)
+            .await?;
     Ok(row.and_then(|r| r.0))
 }
 
-pub async fn update_symbol_name(pool: &SqlitePool, symbol: &str, name: &str, exchange: Option<&str>) -> Result<(), sqlx::Error> {
+pub async fn update_symbol_name(
+    pool: &SqlitePool,
+    symbol: &str,
+    name: &str,
+    exchange: Option<&str>,
+) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         UPDATE symbols SET name = ?, exchange = ?, updated_at = CURRENT_TIMESTAMP
         WHERE symbol = ?
-        "#
+        "#,
     )
     .bind(name)
     .bind(exchange)
