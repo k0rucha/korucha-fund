@@ -50,6 +50,19 @@ pub async fn list_transactions(pool: &SqlitePool) -> Result<Vec<Transaction>, sq
     Ok(rows.into_iter().map(Transaction::from).collect())
 }
 
+pub async fn get_currency_for_symbol(
+    pool: &SqlitePool,
+    symbol: &str,
+) -> Result<Option<String>, sqlx::Error> {
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT currency FROM transactions WHERE symbol = ? ORDER BY txn_date DESC, id DESC LIMIT 1",
+    )
+    .bind(symbol)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|row| row.0))
+}
+
 pub async fn create_transaction(
     pool: &SqlitePool,
     data: NewTransaction,

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use chrono::{Duration, NaiveDate};
 use sqlx::SqlitePool;
 
-use crate::db::{api_stats, fx, prices, snapshots, transactions};
+use crate::db::{fx, prices, snapshots, transactions};
 use crate::domain::portfolio::{self as domain_portfolio, Transaction};
 use crate::services::{market_data, portfolio};
 
@@ -119,17 +119,11 @@ async fn run_daily_batch_inner(pool: &SqlitePool) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    for symbol in &symbols {
-        if let Err(error) = market_data::update_price_cache(pool, symbol).await {
-            tracing::warn!(%symbol, %error, "daily price update failed");
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-    }
-    if let Err(error) = market_data::update_fx_cache(pool).await {
-        tracing::warn!(%error, "daily FX update failed");
-    }
-    if let Err(error) = api_stats::record_api_request_forced(pool).await {
-        tracing::warn!(%error, "failed to record daily API request");
+    let (success, claimed) = market_data::try_update_prices_from_api(pool, &symbols).await;
+    if !claimed {
+        tracing::info!("daily market update skipped: API rate limit in effect");
+    } else if !success {
+        tracing::warn!("daily market update was incomplete");
     }
 
     if let Some(portfolio) = portfolio::current_for_snapshot(pool).await? {

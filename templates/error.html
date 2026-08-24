@@ -11,7 +11,7 @@
         サーバーで問題が起きている可能性があります。
     </p>
     <div class="flex flex-col sm:flex-row gap-4">
-        <button onclick="location.reload()" class="da-card px-10 py-4 text-lg font-bold text-da-blue-900 hover:bg-da-blue-50 transition-all hover:scale-105 active:scale-95">
+        <button id="reloadPage" type="button" class="da-card px-10 py-4 text-lg font-bold text-da-blue-900 hover:bg-da-blue-50 transition-all hover:scale-105 active:scale-95">
             ページを再読み込み
         </button>
         <a href="/" class="refresh-btn text-white px-10 py-4 rounded-xl text-lg font-bold shadow-lg transition-all hover:scale-105 active:scale-95">
@@ -19,4 +19,7 @@
         </a>
     </div>
 </div>
+<script>
+document.getElementById('reloadPage')?.addEventListener('click', () => location.reload());
+</script>
 {% endblock %}

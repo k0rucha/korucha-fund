@@ -1,30 +1,48 @@
+use anyhow::Context;
 use chrono::NaiveDate;
 use sqlx::SqlitePool;
 
 use crate::clients::yahoo;
-use crate::db::{api_stats, fx, prices, symbols};
+use crate::db::{api_stats, fx, prices, symbols, transactions};
 
 pub async fn update_price_cache(pool: &SqlitePool, symbol: &str) -> anyhow::Result<()> {
-    let (price, date) = yahoo::latest_close(symbol).await?;
+    let (price, date) = tokio::time::timeout(
+        std::time::Duration::from_secs(15),
+        yahoo::latest_close(symbol),
+    )
+    .await
+    .context("latest quote request timed out")??;
     prices::upsert_price(pool, symbol, date, price).await?;
 
-    let currency = if symbol.ends_with(".T") { "JPY" } else { "USD" };
-    symbols::upsert_symbol(pool, symbol, None, currency).await?;
-    if symbols::get_symbol_name(pool, symbol).await?.is_none() {
-        match yahoo::symbol_name(symbol).await {
-            Ok(Some(name)) => {
-                symbols::update_symbol_name(pool, symbol, &name, None).await?;
-                tracing::info!(%symbol, %name, "updated symbol name");
+    let currency = transactions::get_currency_for_symbol(pool, symbol)
+        .await?
+        .unwrap_or_else(|| {
+            if symbol.ends_with(".T") {
+                "JPY".into()
+            } else {
+                "USD".into()
             }
-            Ok(None) => {}
-            Err(error) => tracing::warn!(%symbol, %error, "symbol lookup failed"),
+        });
+    symbols::upsert_symbol(pool, symbol, None, &currency).await?;
+    if symbols::get_symbol_name(pool, symbol).await?.is_none() {
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(15),
+            yahoo::symbol_name(symbol),
+        )
+        .await
+        {
+            Err(_) => tracing::warn!(%symbol, "symbol lookup timed out"),
+            Ok(result) => match result {
+                Ok(Some(name)) => {
+                    symbols::update_symbol_name(pool, symbol, &name, None).await?;
+                    tracing::info!(%symbol, %name, "updated symbol name");
+                }
+                Ok(None) => {}
+                Err(error) => tracing::warn!(%symbol, %error, "symbol lookup failed"),
+            },
         }
     }
     Ok(())
-}
-
-pub async fn lookup_symbol_name(symbol: &str) -> anyhow::Result<Option<String>> {
-    yahoo::symbol_name(symbol).await
 }
 
 pub async fn backfill_price_history(
@@ -32,17 +50,32 @@ pub async fn backfill_price_history(
     symbol: &str,
     start: NaiveDate,
 ) -> anyhow::Result<usize> {
-    let rows = yahoo::daily_closes(symbol, start).await?;
+    let rows = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        yahoo::daily_closes(symbol, start),
+    )
+    .await
+    .context("price history request timed out")??;
     Ok(prices::bulk_insert_prices(pool, symbol, &rows).await?)
 }
 
 pub async fn backfill_fx_history(pool: &SqlitePool, start: NaiveDate) -> anyhow::Result<usize> {
-    let rows = yahoo::daily_closes("USDJPY=X", start).await?;
+    let rows = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        yahoo::daily_closes("USDJPY=X", start),
+    )
+    .await
+    .context("FX history request timed out")??;
     Ok(fx::bulk_insert_usdjpy(pool, &rows).await?)
 }
 
 pub async fn update_fx_cache(pool: &SqlitePool) -> anyhow::Result<()> {
-    let (rate, date) = yahoo::latest_close("USDJPY=X").await?;
+    let (rate, date) = tokio::time::timeout(
+        std::time::Duration::from_secs(15),
+        yahoo::latest_close("USDJPY=X"),
+    )
+    .await
+    .context("latest FX request timed out")??;
     fx::upsert_usdjpy(pool, date, rate).await?;
     Ok(())
 }

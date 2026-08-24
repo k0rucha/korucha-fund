@@ -32,9 +32,11 @@ pub struct Dashboard {
     pub day: Option<PortfolioChange>,
     pub month: Option<PortfolioChange>,
     pub cumulative_pnl_jpy: f64,
+    pub fallback_price_symbols: Vec<String>,
+    pub fallback_fx_rate: bool,
 }
 
-pub async fn load(pool: &SqlitePool) -> sqlx::Result<Dashboard> {
+pub async fn load(pool: &SqlitePool) -> anyhow::Result<Dashboard> {
     let current = portfolio_service::current_for_display(pool).await?;
     let today = jst_today();
     let yesterday = today - Duration::days(1);
@@ -43,8 +45,8 @@ pub async fn load(pool: &SqlitePool) -> sqlx::Result<Dashboard> {
 
     for holding in current.portfolio.holdings.iter().cloned() {
         let (day, month) = tokio::try_join!(
-            holding_change(pool, &holding, yesterday, current.usd_jpy),
-            holding_change(pool, &holding, month_ago, current.usd_jpy),
+            holding_change(pool, &holding, yesterday),
+            holding_change(pool, &holding, month_ago),
         )?;
         let name = current
             .symbol_names
@@ -71,6 +73,8 @@ pub async fn load(pool: &SqlitePool) -> sqlx::Result<Dashboard> {
         current.portfolio.realized_pnl_jpy + current.portfolio.unrealized_pnl_jpy;
 
     Ok(Dashboard {
+        fallback_price_symbols: current.fallback_price_symbols,
+        fallback_fx_rate: current.fallback_fx_rate,
         portfolio: current.portfolio,
         holdings,
         day,
@@ -83,16 +87,16 @@ async fn holding_change(
     pool: &SqlitePool,
     holding: &ValuedHolding,
     date: NaiveDate,
-    current_usd_jpy: f64,
 ) -> sqlx::Result<Option<ValueChange>> {
     let Some(previous_price) = prices::get_price_on_or_before(pool, &holding.symbol, date).await?
     else {
         return Ok(None);
     };
     let fx_rate = if holding.currency == "USD" {
-        fx::get_usdjpy_on_or_before(pool, date)
-            .await?
-            .unwrap_or(current_usd_jpy)
+        let Some(rate) = fx::get_usdjpy_on_or_before(pool, date).await? else {
+            return Ok(None);
+        };
+        rate
     } else {
         1.0
     };

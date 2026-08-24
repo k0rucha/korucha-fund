@@ -2,7 +2,6 @@ use askama::Template;
 use axum::{
     Json,
     extract::{Path, Query, State},
-    http::HeaderMap,
     response::IntoResponse,
 };
 use serde::{Deserialize, Serialize};
@@ -14,22 +13,8 @@ use crate::handlers::template_response::TemplateResponse;
 use crate::services::share_cards::{self as share_service, FundHoldingSnapshot};
 use crate::util::{format_with_commas, signed_pct, signed_with_commas};
 
-pub(crate) fn base_url(headers: &HeaderMap) -> String {
-    let host = headers
-        .get("host")
-        .and_then(|h| h.to_str().ok())
-        .unwrap_or("fund.korucha.com");
-    let scheme = headers
-        .get("x-forwarded-proto")
-        .and_then(|h| h.to_str().ok())
-        .unwrap_or_else(|| {
-            if host.starts_with("localhost") || host.starts_with("127.") {
-                "http"
-            } else {
-                "https"
-            }
-        });
-    format!("{}://{}", scheme, host)
+pub(crate) fn base_url(state: &AppState) -> &str {
+    &state.config.public_base_url
 }
 
 #[derive(Deserialize)]
@@ -46,12 +31,41 @@ pub struct CreateShareResponse {
 pub async fn create_share_card(
     State(state): State<AppState>,
     Query(q): Query<CreateShareQuery>,
-) -> AppResult<impl IntoResponse> {
+) -> Result<impl IntoResponse, (axum::http::StatusCode, String)> {
+    if !crate::handlers::claim_share_creation(&state).await {
+        return Err((
+            axum::http::StatusCode::TOO_MANY_REQUESTS,
+            "共有カードの連続発行はできません。少し待ってから再試行してください".into(),
+        ));
+    }
     let id = share_service::create_fund_card(&state.db, q.span.as_deref())
         .await
-        .map_err(AppError::Other)?;
+        .map_err(create_card_error_response)?;
     let url = format!("/share/{}", id);
     Ok(Json(CreateShareResponse { id, url }))
+}
+
+pub(crate) fn create_card_error_response(
+    error: share_service::CreateCardError,
+) -> (axum::http::StatusCode, String) {
+    match error {
+        share_service::CreateCardError::InvalidInput(_) => {
+            (axum::http::StatusCode::BAD_REQUEST, error.to_string())
+        }
+        share_service::CreateCardError::DataUnavailable(_) => (
+            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+            error.to_string(),
+        ),
+        share_service::CreateCardError::Database(_)
+        | share_service::CreateCardError::Serialization(_)
+        | share_service::CreateCardError::Other(_) => {
+            tracing::error!(%error, "share card creation failed");
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "共有カードの発行中にエラーが発生しました".into(),
+            )
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -87,6 +101,8 @@ pub struct ShareTemplate {
     pub value_delta_num: f64,
     pub value_delta_pct: String,
     pub days_since: i64,
+    pub fallback_price_symbols: String,
+    pub fallback_fx_rate: bool,
 
     pub holdings: Vec<HoldingRow>,
 
@@ -106,7 +122,6 @@ pub struct ShareTemplate {
 pub async fn view_share_card(
     State(state): State<AppState>,
     Path(id): Path<String>,
-    headers: HeaderMap,
 ) -> AppResult<impl IntoResponse> {
     let card = share_cards::get_share_card(&state.db, &id)
         .await
@@ -114,12 +129,12 @@ pub async fn view_share_card(
         .ok_or(AppError::NotFound)?;
 
     let issue_holdings: Vec<FundHoldingSnapshot> =
-        serde_json::from_str(&card.holdings_json).unwrap_or_default();
+        serde_json::from_str(&card.holdings_json).map_err(|error| AppError::Other(error.into()))?;
 
-    let cur_value = share_service::current_fund(&state.db)
+    let current_fund = share_service::current_fund(&state.db)
         .await
-        .map_err(AppError::Database)?
-        .total_value_jpy;
+        .map_err(AppError::Other)?;
+    let cur_value = current_fund.total_value_jpy;
 
     let issue_pnl_pct = if card.total_cost_jpy > 0.0 {
         (card.unrealized_pnl_jpy / card.total_cost_jpy) * 100.0
@@ -135,7 +150,7 @@ pub async fn view_share_card(
     };
 
     // SQLite stores CURRENT_TIMESTAMP in UTC; display everything in JST.
-    let jst = chrono::FixedOffset::east_opt(9 * 3600).unwrap();
+    let jst = crate::util::jst();
     let created_jst = chrono::TimeZone::from_utc_datetime(&jst, &card.created_at);
     let issue_date = created_jst.date_naive();
     let today_jst = chrono::Utc::now().with_timezone(&jst).date_naive();
@@ -166,13 +181,13 @@ pub async fn view_share_card(
     // Chart history: every snapshot on/before issuance date. JS filters by span.
     let snaps = snapshots::list_snapshots(&state.db)
         .await
-        .unwrap_or_default();
+        .map_err(AppError::Database)?;
     let filtered: Vec<_> = snaps.into_iter().filter(|s| s.date <= issue_date).collect();
     let history_dates: Vec<String> = filtered.iter().map(|s| s.date.to_string()).collect();
     let history_values: Vec<f64> = filtered.iter().map(|s| s.total_value_jpy).collect();
     let history_pnls: Vec<f64> = filtered.iter().map(|s| s.unrealized_pnl_jpy).collect();
 
-    let base = base_url(&headers);
+    let base = base_url(&state);
     let og_url = format!("{}/share/{}", base, card.id);
     let og_image_url = format!("{}/share/{}/ogp.png", base, card.id);
     let og_title = format!(
@@ -206,12 +221,17 @@ pub async fn view_share_card(
         value_delta_num: value_delta,
         value_delta_pct: signed_pct(value_delta_pct_num),
         days_since,
+        fallback_price_symbols: current_fund.fallback_price_symbols.join(", "),
+        fallback_fx_rate: current_fund.fallback_fx_rate,
 
         holdings: rows,
 
-        history_dates_json: serde_json::to_string(&history_dates).unwrap_or_else(|_| "[]".into()),
-        history_values_json: serde_json::to_string(&history_values).unwrap_or_else(|_| "[]".into()),
-        history_pnls_json: serde_json::to_string(&history_pnls).unwrap_or_else(|_| "[]".into()),
+        history_dates_json: serde_json::to_string(&history_dates)
+            .map_err(|error| AppError::Other(error.into()))?,
+        history_values_json: serde_json::to_string(&history_values)
+            .map_err(|error| AppError::Other(error.into()))?,
+        history_pnls_json: serde_json::to_string(&history_pnls)
+            .map_err(|error| AppError::Other(error.into()))?,
         default_span: card.default_span,
 
         og_url,

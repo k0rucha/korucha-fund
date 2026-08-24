@@ -82,7 +82,14 @@ async function loadStatus() {
         const stats = data.api_stats;
         const sched = data.scheduler;
 
-        const usagePct = (stats.request_count / stats.max_requests) * 100;
+        const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[character]);
+        const usagePct = Math.max(0, Math.min(100, (stats.request_count / stats.max_requests) * 100));
+        const safeStatusMessage = escapeHtml(stats.status_message);
+        const safeNextExecution = escapeHtml(sched.next_execution_time);
+        const safeCronExpression = escapeHtml(sched.cron_expression);
+        const safeLastRequestTime = escapeHtml(stats.last_request_time);
 
         // Status pill
         let pillClass = 'available';
@@ -139,7 +146,7 @@ async function loadStatus() {
                 <div class="da-card p-6 lg:col-span-1">
                     <h3 class="text-sm font-bold text-da-gray-600 uppercase tracking-wider mb-4">現在の状態</h3>
                     <div class="mb-4">
-                        <span class="status-pill ${pillClass}">${stats.status_message}</span>
+                        <span class="status-pill ${pillClass}">${safeStatusMessage}</span>
                     </div>
                     <p class="text-xs text-da-gray-600 leading-relaxed">
                         外部APIへのアクセスが可能かどうかを示します。最小96分間隔・1日15回までが上限です。
@@ -166,8 +173,8 @@ async function loadStatus() {
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <div class="text-xs font-bold text-da-gray-400 uppercase tracking-widest mb-2">次回実行予定</div>
-                        <div class="text-2xl font-black text-da-orange-600 leading-none tabular-nums">${sched.next_execution_time}</div>
-                        <div class="text-xs text-da-gray-400 font-mono mt-2">cron: ${sched.cron_expression}</div>
+                        <div class="text-2xl font-black text-da-orange-600 leading-none tabular-nums">${safeNextExecution}</div>
+                        <div class="text-xs text-da-gray-400 font-mono mt-2">cron: ${safeCronExpression}</div>
                     </div>
                     <div>
                         <div class="text-xs font-bold text-da-gray-400 uppercase tracking-widest mb-2">残り時間</div>
@@ -178,7 +185,7 @@ async function loadStatus() {
                     </div>
                 </div>
                 <p class="text-xs text-da-gray-600 mt-5 leading-relaxed">
-                    バックフィル処理と全スナップショット再生成を自動実行します。手動更新と同様に外部APIカウントへ加算されます。
+                    保有銘柄と為替の終値を取得し、当日のスナップショットを保存します。手動更新と同じ更新枠を使用します。
                 </p>
             </div>
 
@@ -195,7 +202,7 @@ async function loadStatus() {
                         </tr>
                         <tr>
                             <td>最後のAPI呼び出し</td>
-                            <td>${stats.last_request_time}</td>
+                            <td>${safeLastRequestTime}</td>
                         </tr>
                         <tr>
                             <td>次回API更新可能</td>
@@ -224,17 +231,17 @@ async function loadStatus() {
                     <div>
                         <div class="text-xs font-bold text-da-blue-900 uppercase tracking-widest mb-2">手動更新</div>
                         <ul class="text-da-gray-700 space-y-1.5 list-disc list-inside text-xs leading-relaxed">
-                            <li>Stage 1: キャッシュからスナップショット生成（常に実行）</li>
-                            <li>Stage 2: レート制限OK時に外部API更新</li>
+                            <li>更新枠があれば外部APIから価格・為替を取得</li>
+                            <li>取得後のデータから当日スナップショットを生成</li>
                             <li>クリックは何度でも可能</li>
                         </ul>
                     </div>
                     <div>
                         <div class="text-xs font-bold text-da-orange-600 uppercase tracking-widest mb-2">自動更新</div>
                         <ul class="text-da-gray-700 space-y-1.5 list-disc list-inside text-xs leading-relaxed">
-                            <li>${sched.cron_expression === '0 0 23 * * *' ? '毎日 23:00 JST' : `cron: ${sched.cron_expression}`}に実行</li>
-                            <li>過去価格のバックフィル取得</li>
-                            <li>全期間のスナップショット再生成</li>
+                            <li>${sched.cron_expression === '0 0 23 * * *' ? '毎日 23:00 JST' : `cron: ${safeCronExpression}`}に実行</li>
+                            <li>保有銘柄とUSD/JPYの終値を取得</li>
+                            <li>当日のスナップショットを保存</li>
                         </ul>
                     </div>
                     <div>
@@ -256,16 +263,19 @@ async function loadStatus() {
         container.innerHTML = `
             <div class="da-card p-12 text-center">
                 <p class="text-da-gray-600 text-sm mb-4">ステータスの読み込みに失敗しました</p>
-                <button onclick="location.reload()"
+                <button id="statusRetry" type="button"
                     class="text-da-blue-900 hover:text-da-blue-600 text-sm font-bold transition-colors">
                     再試行
                 </button>
             </div>
         `;
+        document.getElementById('statusRetry')?.addEventListener('click', () => location.reload());
     }
 }
 
 loadStatus();
-setInterval(loadStatus, 30000);
+setInterval(() => {
+    if (!document.hidden) loadStatus();
+}, 30000);
 </script>
 {% endblock %}

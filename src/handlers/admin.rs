@@ -32,7 +32,10 @@ pub async fn admin_index(
         })?;
     let symbol_list = symbols::get_symbol_names(&state.db)
         .await
-        .unwrap_or_default();
+        .map_err(|error| {
+            tracing::error!(%error, "failed to list symbol names");
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     let symbol_names: HashMap<String, String> = symbol_list
         .into_iter()
         .filter_map(|s| s.name.map(|n| (s.symbol, n)))
@@ -81,7 +84,8 @@ impl TryFrom<TransactionForm> for NewTransaction {
             txn_date,
             fx_rate_to_jpy,
             notes,
-        })
+        }
+        .normalized()?)
     }
 }
 
@@ -92,23 +96,38 @@ pub async fn add_transaction(
     let data = NewTransaction::try_from(form)
         .map_err(|e| (axum::http::StatusCode::BAD_REQUEST, e.to_string()))?;
 
-    transactions::create_transaction(&state.db, data.clone())
+    let transaction_guard = state.transaction_lock.lock().await;
+    transaction_service::create(&state.db, data.clone())
         .await
-        .map_err(|e| {
-            tracing::error!("Failed to create transaction: {}", e);
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to create transaction".to_string(),
-            )
+        .map_err(|error| match error {
+            transaction_service::MutationError::InvalidLedger(_) => {
+                (axum::http::StatusCode::BAD_REQUEST, error.to_string())
+            }
+            transaction_service::MutationError::NotFound => {
+                (axum::http::StatusCode::NOT_FOUND, error.to_string())
+            }
+            transaction_service::MutationError::Database(_) => {
+                tracing::error!(%error, "failed to create transaction");
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    "取引の保存中にデータベースエラーが発生しました".to_string(),
+                )
+            }
         })?;
+    drop(transaction_guard);
 
     // Symbols-table auto-population happens in the background so the admin
     // form returns immediately even if yfinance is slow / failing.
     let pool = state.db.clone();
     let symbol = data.symbol.clone();
     tokio::spawn(async move {
-        if let Err(e) = crate::services::market_data::update_price_cache(&pool, &symbol).await {
-            tracing::warn!("Background price cache update failed for {}: {}", symbol, e);
+        let (success, claimed) = crate::services::market_data::try_update_prices_from_api(
+            &pool,
+            std::slice::from_ref(&symbol),
+        )
+        .await;
+        if claimed && !success {
+            tracing::warn!(%symbol, "background market-data update was incomplete");
         }
     });
 
@@ -119,13 +138,21 @@ pub async fn delete_transaction(
     State(state): State<AppState>,
     Path(id): Path<i64>,
 ) -> Result<impl IntoResponse, axum::http::StatusCode> {
-    transactions::delete_transaction(&state.db, id)
+    let transaction_guard = state.transaction_lock.lock().await;
+    transaction_service::delete(&state.db, id)
         .await
-        .map_err(|e| {
-            tracing::error!("Failed to delete transaction: {}", e);
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR
+        .map_err(|error| match error {
+            transaction_service::MutationError::NotFound => axum::http::StatusCode::NOT_FOUND,
+            transaction_service::MutationError::InvalidLedger(_) => {
+                axum::http::StatusCode::CONFLICT
+            }
+            transaction_service::MutationError::Database(_) => {
+                tracing::error!(%error, "failed to delete transaction");
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR
+            }
         })?;
-    Ok(axum::http::StatusCode::OK)
+    drop(transaction_guard);
+    Ok(([("HX-Refresh", "true")], axum::http::StatusCode::OK))
 }
 
 pub async fn export_transactions(
@@ -157,13 +184,13 @@ pub async fn import_transactions(
     while let Some(field) = multipart
         .next_field()
         .await
-        .map_err(|e| (axum::http::StatusCode::BAD_REQUEST, e.to_string()))?
+        .map_err(|e| (e.status(), e.to_string()))?
     {
         if field.name() == Some("file") {
             let bytes = field
                 .bytes()
                 .await
-                .map_err(|e| (axum::http::StatusCode::BAD_REQUEST, e.to_string()))?;
+                .map_err(|e| (e.status(), e.to_string()))?;
             data = Some(bytes);
             break;
         }
@@ -180,15 +207,24 @@ pub async fn import_transactions(
         )
     })?;
 
+    let transaction_guard = state.transaction_lock.lock().await;
     let result = transaction_service::import(&state.db, imported_txs)
         .await
-        .map_err(|error| {
-            tracing::error!(%error, "transaction import failed");
-            (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed during import".to_string(),
-            )
+        .map_err(|error| match error {
+            transaction_service::ImportError::TooManyTransactions
+            | transaction_service::ImportError::InvalidTransaction { .. }
+            | transaction_service::ImportError::InvalidLedger(_) => {
+                (axum::http::StatusCode::BAD_REQUEST, error.to_string())
+            }
+            transaction_service::ImportError::Database(_) => {
+                tracing::error!(%error, "transaction import failed");
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    "インポート中にデータベースエラーが発生しました".to_string(),
+                )
+            }
         })?;
+    drop(transaction_guard);
 
     tracing::info!(
         "Import complete: {} new, {} skipped (duplicate)",
@@ -199,10 +235,11 @@ pub async fn import_transactions(
     // Background-fetch prices for newly seen symbols.
     let pool = state.db.clone();
     tokio::spawn(async move {
-        for symbol in result.symbols {
-            if let Err(e) = crate::services::market_data::update_price_cache(&pool, &symbol).await {
-                tracing::warn!("Background price cache update failed for {}: {}", symbol, e);
-            }
+        let symbols: Vec<_> = result.symbols.into_iter().collect();
+        let (success, claimed) =
+            crate::services::market_data::try_update_prices_from_api(&pool, &symbols).await;
+        if claimed && !success {
+            tracing::warn!("background import market-data update was incomplete");
         }
     });
 

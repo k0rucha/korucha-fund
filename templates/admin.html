@@ -20,14 +20,14 @@
                 </svg>
                 エクスポート (JSON)
             </a>
-            <button type="button" onclick="document.getElementById('import-input').click()" class="da-card px-4 py-2 text-xs font-bold text-da-gray-600 hover:bg-da-gray-50 flex items-center gap-2 transition-colors" aria-label="取引履歴を JSON でインポート">
+            <button id="open-import-picker" type="button" class="da-card px-4 py-2 text-xs font-bold text-da-gray-600 hover:bg-da-gray-50 flex items-center gap-2 transition-colors" aria-label="取引履歴を JSON でインポート">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                 </svg>
                 インポート (JSON)
             </button>
             <form id="import-form" action="/admin/import" method="POST" enctype="multipart/form-data" class="hidden">
-                <input type="file" id="import-input" name="file" accept=".json" aria-label="インポートする JSON ファイル">
+                <input type="file" id="import-input" name="file" accept=".json,application/json" aria-label="インポートする JSON ファイル">
             </form>
         </div>
     </div>
@@ -41,7 +41,7 @@
         <form action="/admin/transactions" method="POST" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             <div class="lg:col-span-1">
                 <label for="tx-symbol" class="block text-[10px] font-bold text-da-gray-600 uppercase tracking-widest mb-3">銘柄シンボル</label>
-                <input id="tx-symbol" type="text" name="symbol" placeholder="例: 7203.T, AAPL" required
+                <input id="tx-symbol" type="text" name="symbol" placeholder="例: 7203.T, AAPL" required maxlength="32" autocapitalize="characters" spellcheck="false"
                     class="w-full bg-white border border-da-gray-200 rounded px-4 py-3 text-da-gray-800 focus:outline-none focus:ring-2 focus:ring-da-blue-900/10 focus:border-da-blue-900 transition-all placeholder:text-da-gray-400 text-sm">
             </div>
             <div class="lg:col-span-1">
@@ -54,15 +54,15 @@
             </div>
             <div class="lg:col-span-1">
                 <label for="tx-quantity" class="block text-[10px] font-bold text-da-gray-600 uppercase tracking-widest mb-3">数量</label>
-                <input id="tx-quantity" type="number" step="any" name="quantity" required
+                <input id="tx-quantity" type="number" step="any" min="0.000000000001" name="quantity" required
                     class="w-full bg-white border border-da-gray-200 rounded px-4 py-3 text-da-gray-800 focus:outline-none focus:ring-2 focus:ring-da-blue-900/10 transition-all text-sm">
             </div>
             <div class="lg:col-span-1">
                 <label for="tx-price" class="block text-[10px] font-bold text-da-gray-600 uppercase tracking-widest mb-3">単価</label>
                 <div class="flex gap-2">
-                    <input id="tx-price" type="number" step="any" name="price" required
+                    <input id="tx-price" type="number" step="any" min="0.000000000001" name="price" required
                         class="flex-1 bg-white border border-da-gray-200 rounded px-4 py-3 text-da-gray-800 focus:outline-none focus:ring-2 focus:ring-da-blue-900/10 transition-all text-sm">
-                    <select name="currency" required aria-label="通貨"
+                    <select id="tx-currency" name="currency" required aria-label="通貨"
                         class="w-24 bg-white border border-da-gray-200 rounded px-2 py-3 text-da-gray-800 focus:outline-none focus:ring-2 focus:ring-da-blue-900/10 transition-all appearance-none cursor-pointer text-center text-sm">
                         <option value="JPY">JPY</option>
                         <option value="USD">USD</option>
@@ -71,7 +71,7 @@
             </div>
             <div class="lg:col-span-1">
                 <label for="tx-fee" class="block text-[10px] font-bold text-da-gray-600 uppercase tracking-widest mb-3">手数料</label>
-                <input id="tx-fee" type="number" step="any" name="fee" value="0" required
+                <input id="tx-fee" type="number" step="any" min="0" name="fee" value="0" required
                     class="w-full bg-white border border-da-gray-200 rounded px-4 py-3 text-da-gray-800 focus:outline-none focus:ring-2 focus:ring-da-blue-900/10 transition-all text-sm">
             </div>
             <div class="lg:col-span-1">
@@ -81,12 +81,12 @@
             </div>
             <div class="md:col-span-2">
                 <label for="tx-fx" class="block text-[10px] font-bold text-da-gray-600 uppercase tracking-widest mb-3">USD/JPY換算レート (USD取引のみ)</label>
-                <input id="tx-fx" type="number" step="any" name="fx_rate_to_jpy" placeholder="150.0"
+                <input id="tx-fx" type="number" step="any" min="0.000000000001" name="fx_rate_to_jpy" placeholder="150.0"
                     class="w-full bg-white border border-da-gray-200 rounded px-4 py-3 text-da-gray-800 focus:outline-none focus:ring-2 focus:ring-da-blue-900/10 transition-all placeholder:text-da-gray-400 text-sm">
             </div>
             <div class="md:col-span-4">
                 <label for="tx-notes" class="block text-[10px] font-bold text-da-gray-600 uppercase tracking-widest mb-3">メモ</label>
-                <input id="tx-notes" type="text" name="notes" placeholder="任意"
+                <input id="tx-notes" type="text" name="notes" maxlength="1000" placeholder="任意"
                     class="w-full bg-white border border-da-gray-200 rounded px-4 py-3 text-da-gray-800 focus:outline-none focus:ring-2 focus:ring-da-blue-900/10 transition-all placeholder:text-da-gray-400 text-sm">
             </div>
             <div class="md:col-span-4 pt-4">
@@ -171,9 +171,17 @@
     (function () {
         const input = document.getElementById('import-input');
         const form = document.getElementById('import-form');
+        const openPicker = document.getElementById('open-import-picker');
+        const maxImportBytes = 1024 * 1024;
         if (!input || !form) return;
+        openPicker?.addEventListener('click', () => input.click());
         input.addEventListener('change', () => {
             if (!input.files || !input.files.length) return;
+            if (input.files[0].size > maxImportBytes) {
+                showToast('インポートできるファイルは1MBまでです。', 'error');
+                input.value = '';
+                return;
+            }
             const ok = confirm('JSONから取引データをインポートしますか？同じ取引はスキップされます。');
             if (ok) {
                 form.submit();
@@ -181,6 +189,19 @@
                 input.value = ''; // allow re-selecting the same file later
             }
         });
+
+        const currency = document.getElementById('tx-currency');
+        const fxRate = document.getElementById('tx-fx');
+        if (currency && fxRate) {
+            const syncFxRequirement = () => {
+                const isUsd = currency.value === 'USD';
+                fxRate.required = isUsd;
+                fxRate.disabled = !isUsd;
+                if (!isUsd) fxRate.value = '';
+            };
+            currency.addEventListener('change', syncFxRequirement);
+            syncFxRequirement();
+        }
     })();
 </script>
 {% endblock %}

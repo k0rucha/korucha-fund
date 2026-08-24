@@ -1,31 +1,43 @@
 use axum::{extract::State, response::IntoResponse};
+use croner::Cron;
 use serde_json::json;
-use chrono::TimeZone;
+use std::str::FromStr;
 
-use crate::handlers::AppState;
 use crate::db::api_stats;
+use crate::handlers::AppState;
 use crate::util::jst;
 
 fn jst_now() -> chrono::DateTime<chrono::FixedOffset> {
     chrono::Utc::now().with_timezone(&jst())
 }
 
-pub async fn get_status_json(State(state): State<AppState>) -> Result<impl IntoResponse, axum::http::StatusCode> {
+pub async fn get_status_json(
+    State(state): State<AppState>,
+) -> Result<impl IntoResponse, axum::http::StatusCode> {
     // Get current API stats
-    let stats = api_stats::get_stats(&state.db).await.map_err(|_| {
+    let stats = api_stats::get_stats(&state.db).await.map_err(|error| {
+        tracing::error!(%error, "failed to load API stats");
         axum::http::StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    let (can_request, minutes_remaining) = api_stats::can_request_api(&state.db).await.map_err(|_| {
-        axum::http::StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let (can_request, minutes_remaining) =
+        api_stats::can_request_api(&state.db)
+            .await
+            .map_err(|error| {
+                tracing::error!(%error, "failed to check API availability");
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR
+            })?;
 
-    let remaining = api_stats::requests_remaining(&state.db).await.map_err(|_| {
-        axum::http::StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let remaining = api_stats::requests_remaining(&state.db)
+        .await
+        .map_err(|error| {
+            tracing::error!(%error, "failed to load remaining API requests");
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     // Format last request time
-    let last_request_time_str = stats.last_request_time
+    let last_request_time_str = stats
+        .last_request_time
         .map(|dt| dt.format("%Y年%m月%d日 %H:%M:%S").to_string())
         .unwrap_or_else(|| "未実行".to_string());
 
@@ -63,42 +75,52 @@ pub async fn get_status_json(State(state): State<AppState>) -> Result<impl IntoR
     Ok(axum::response::Json(response))
 }
 
-/// Calculate next execution time from a 6-field cron expression
-/// (`second minute hour day month dayofweek`). Only handles plain numeric
-/// hour/minute fields; wildcards/steps (`*`, `*/30`) yield "不明" rather than
-/// silently falling back to a fixed time.
+/// Calculate the next execution using the same cron engine and JST timezone as
+/// the actual scheduler.
 fn calculate_next_cron_execution(cron_expr: &str) -> (String, i64) {
-    let parts: Vec<&str> = cron_expr.split_whitespace().collect();
+    calculate_next_cron_execution_at(cron_expr, jst_now())
+}
 
-    if parts.len() < 6 {
-        return ("不明".to_string(), 1440);
-    }
-
-    let (Some(target_minute), Some(target_hour)) = (parts[1].parse::<u32>().ok(), parts[2].parse::<u32>().ok()) else {
-        return ("不明".to_string(), 1440);
+fn calculate_next_cron_execution_at(
+    cron_expr: &str,
+    now: chrono::DateTime<chrono::FixedOffset>,
+) -> (String, i64) {
+    let Ok(cron) = Cron::from_str(cron_expr) else {
+        return ("不明".to_string(), 0);
     };
+    let Ok(next) = cron.find_next_occurrence(&now, false) else {
+        return ("不明".to_string(), 0);
+    };
+    let seconds = next.signed_duration_since(now).num_seconds().max(0);
+    let minutes = (seconds + 59) / 60;
+    let formatted = if next.date_naive() == now.date_naive() {
+        next.format("%H:%M").to_string()
+    } else {
+        next.format("%m月%d日 %H:%M").to_string()
+    };
+    (formatted, minutes)
+}
 
-    let now = jst_now();
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
 
-    // Try today at target time first.
-    if let Some(today_target) = now.date_naive().and_hms_opt(target_hour, target_minute, 0)
-        && let Some(next_dt) = jst().from_local_datetime(&today_target).single()
-        && next_dt > now
-    {
-        let minutes = next_dt.signed_duration_since(now).num_minutes();
-        let next_str = next_dt.format("%H:%M").to_string();
-        return (next_str, minutes);
+    #[test]
+    fn calculates_full_cron_expression_in_jst() {
+        let now = jst().with_ymd_and_hms(2026, 8, 24, 22, 30, 0).unwrap();
+        assert_eq!(
+            calculate_next_cron_execution_at("0 0 23 * * *", now),
+            ("23:00".into(), 30)
+        );
     }
 
-    // Otherwise tomorrow at target time.
-    let tomorrow = now.date_naive() + chrono::Duration::days(1);
-    if let Some(tomorrow_target) = tomorrow.and_hms_opt(target_hour, target_minute, 0)
-        && let Some(next_dt) = jst().from_local_datetime(&tomorrow_target).single()
-    {
-        let minutes = next_dt.signed_duration_since(now).num_minutes();
-        let date_str = next_dt.format("%m月%d日 %H:%M").to_string();
-        return (date_str, minutes);
+    #[test]
+    fn respects_day_of_week_constraints() {
+        let monday = jst().with_ymd_and_hms(2026, 8, 24, 23, 30, 0).unwrap();
+        assert_eq!(
+            calculate_next_cron_execution_at("0 0 23 * * MON", monday),
+            ("08月31日 23:00".into(), 10_050)
+        );
     }
-
-    ("不明".to_string(), 1440)
 }

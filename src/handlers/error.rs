@@ -1,7 +1,7 @@
 use askama::Template;
 use axum::{
     http::StatusCode,
-    response::{IntoResponse, Response, Html},
+    response::{Html, IntoResponse, Response},
 };
 use thiserror::Error;
 

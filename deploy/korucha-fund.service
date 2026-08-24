@@ -1,0 +1,31 @@
+[Unit]
+Description=Korucha Fund portfolio dashboard
+Documentation=https://github.com/k0rucha/korucha-fund
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/korucha-fund
+EnvironmentFile=%h/.config/korucha-fund/korucha-fund.env
+ExecStart=%h/korucha-fund/target/release/korucha-fund
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+KillSignal=SIGTERM
+UMask=0077
+
+# The service only needs to write its SQLite database and generated sidecars.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/korucha-fund
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=default.target

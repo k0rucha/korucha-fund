@@ -1,5 +1,5 @@
-use sqlx::{SqlitePool, FromRow};
 use chrono::NaiveDate;
+use sqlx::{FromRow, SqlitePool};
 
 #[derive(Debug, FromRow, Clone)]
 pub struct Snapshot {
@@ -23,14 +23,20 @@ pub async fn get_snapshot_on_or_before(
 ) -> Result<Option<Snapshot>, sqlx::Error> {
     sqlx::query_as::<_, Snapshot>(
         "SELECT date, total_value_jpy, total_cost_jpy, unrealized_pnl_jpy
-         FROM snapshots WHERE date <= ? ORDER BY date DESC LIMIT 1"
+         FROM snapshots WHERE date <= ? ORDER BY date DESC LIMIT 1",
     )
     .bind(date)
     .fetch_optional(pool)
     .await
 }
 
-pub async fn upsert_snapshot(pool: &SqlitePool, date: NaiveDate, total_value: f64, total_cost: f64, pnl: f64) -> Result<(), sqlx::Error> {
+pub async fn upsert_snapshot(
+    pool: &SqlitePool,
+    date: NaiveDate,
+    total_value: f64,
+    total_cost: f64,
+    pnl: f64,
+) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         INSERT INTO snapshots (date, total_value_jpy, total_cost_jpy, unrealized_pnl_jpy)
@@ -39,7 +45,7 @@ pub async fn upsert_snapshot(pool: &SqlitePool, date: NaiveDate, total_value: f6
             total_value_jpy = excluded.total_value_jpy,
             total_cost_jpy = excluded.total_cost_jpy,
             unrealized_pnl_jpy = excluded.unrealized_pnl_jpy
-        "#
+        "#,
     )
     .bind(date)
     .bind(total_value)

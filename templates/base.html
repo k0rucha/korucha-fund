@@ -14,13 +14,6 @@
             try { t = localStorage.getItem('korucha-theme'); } catch (e) {}
             if (t !== 'win95') t = 'default';
             document.documentElement.setAttribute('data-theme', t);
-            if (t === 'win95') {
-                // Retro Japanese bitmap font — only fetched when actually used.
-                var link = document.createElement('link');
-                link.rel = 'stylesheet';
-                link.href = 'https://fonts.googleapis.com/css2?family=DotGothic16&display=swap';
-                document.head.appendChild(link);
-            }
             window.chartTheme = (t === 'win95') ? {
                 linePrimary: '#000080', tick: '#000000', grid: '#9a9a9a', legend: '#000000',
                 tooltipBg: '#ffffe1', tooltipTitle: '#000000', tooltipBody: '#000000', tooltipBorder: '#000000',
@@ -39,48 +32,13 @@
     <meta name="description" content="{% block description %}こるちゃの個人株式ポートフォリオダッシュボード{% endblock %}">
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     {% block extra_head %}{% endblock %}
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    // Colours resolve through CSS variables (RGB channels) so a
-                    // single `:root` / `[data-theme=...]` swap re-themes every
-                    // text-/bg-/border-da-* utility, opacity modifiers included.
-                    colors: {
-                        'da-blue': {
-                            1200: 'rgb(var(--da-blue-1200) / <alpha-value>)',
-                            900: 'rgb(var(--da-blue-900) / <alpha-value>)',
-                            600: 'rgb(var(--da-blue-600) / <alpha-value>)',
-                            50: 'rgb(var(--da-blue-50) / <alpha-value>)',
-                        },
-                        'da-orange': {
-                            600: 'rgb(var(--da-orange-600) / <alpha-value>)',
-                            400: 'rgb(var(--da-orange-400) / <alpha-value>)',
-                            50: 'rgb(var(--da-orange-50) / <alpha-value>)',
-                        },
-                        'da-gray': {
-                            800: 'rgb(var(--da-gray-800) / <alpha-value>)',
-                            600: 'rgb(var(--da-gray-600) / <alpha-value>)',
-                            400: 'rgb(var(--da-gray-400) / <alpha-value>)',
-                            200: 'rgb(var(--da-gray-200) / <alpha-value>)',
-                            50: 'rgb(var(--da-gray-50) / <alpha-value>)',
-                        },
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'Noto Sans JP', 'sans-serif'],
-                    },
-                },
-            },
-        }
-    </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+JP:wght@400;500;600;700&display=swap"
-        rel="stylesheet">
-    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="/static/app.css">
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js"
+        integrity="sha384-H5SrcfygHmAuTDZphMHqBJLc3FhssKjG7w/CeCpFReSfwBWDTKpkzPP8c+cLsK+V"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"
+        integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ"
+        crossorigin="anonymous"></script>
     <style>
         :root {
             /* da-* palette as RGB channels — consumed by tailwind.config above. */
@@ -421,7 +379,7 @@
         [data-theme="win95"] button,
         [data-theme="win95"] textarea,
         [data-theme="win95"] table {
-            font-family: 'DotGothic16', 'MS PGothic', 'Courier New', monospace;
+            font-family: 'MS PGothic', 'Noto Sans JP', 'Courier New', monospace;
             letter-spacing: 0;
         }
 
@@ -582,8 +540,11 @@
 </head>
 
 <body class="text-da-gray-800 font-sans">
+    <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded focus:bg-white focus:px-4 focus:py-3 focus:font-bold focus:text-da-blue-900 focus:shadow-lg">
+        メインコンテンツへ移動
+    </a>
     <!-- Toast notification container -->
-    <div id="toastContainer"></div>
+    <div id="toastContainer" aria-live="polite" aria-atomic="false"></div>
 
     <!-- Full screen loader (outside main container) -->
     <div id="loadingOverlay" class="htmx-indicator">
@@ -654,7 +615,7 @@
             </div>
         </header>
 
-        <main>
+        <main id="main-content" tabindex="-1">
             {% block content %}{% endblock %}
         </main>
 
@@ -667,8 +628,8 @@
 
     <!-- Share-card modal: 3 steps
          (mode picker → fund-span / ticker-input → URL display) -->
-    <div id="shareModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-hidden" style="background: rgba(0,0,0,0.4);">
-        <div class="da-card p-7 max-w-md w-full">
+    <div id="shareModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 modal-hidden" style="background: rgba(0,0,0,0.4);" role="dialog" aria-modal="true" aria-label="共有カードを発行" aria-hidden="true">
+        <div class="da-card p-7 max-w-md w-full" tabindex="-1">
             <!-- Step 0: choose mode -->
             <div id="shareStep0">
                 <h3 class="text-lg font-bold text-da-blue-1200 mb-2">共有カードを発行</h3>
@@ -676,11 +637,11 @@
                     何を共有するカードを発行しますか？
                 </p>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-                    <button data-mode="fund" class="share-mode-btn da-card text-left p-5 hover:bg-da-blue-50 transition-colors">
+                    <button type="button" data-mode="fund" class="share-mode-btn da-card text-left p-5 hover:bg-da-blue-50 transition-colors">
                         <div class="text-sm font-bold text-da-blue-900 mb-1">ファンド全体</div>
                         <div class="text-xs text-da-gray-600">総評価額・損益・銘柄構成</div>
                     </button>
-                    <button data-mode="ticker" class="share-mode-btn da-card text-left p-5 hover:bg-da-blue-50 transition-colors">
+                    <button type="button" data-mode="ticker" class="share-mode-btn da-card text-left p-5 hover:bg-da-blue-50 transition-colors">
                         <div class="text-sm font-bold text-da-blue-900 mb-1">特定銘柄</div>
                         <div class="text-xs text-da-gray-600">ティッカー指定で価格推移を共有</div>
                     </button>
@@ -700,9 +661,9 @@
                     カードに表示するチャートの期間を選んでください。発行時点のスナップショットが保存されます。
                 </p>
                 <div class="grid grid-cols-3 gap-2 mb-5">
-                    <button data-span="all" class="share-fund-span-btn da-card px-3 py-4 text-sm font-bold text-da-blue-900 hover:bg-da-blue-50 transition-colors">全期間</button>
-                    <button data-span="30d" class="share-fund-span-btn da-card px-3 py-4 text-sm font-bold text-da-blue-900 hover:bg-da-blue-50 transition-colors">30日</button>
-                    <button data-span="7d" class="share-fund-span-btn da-card px-3 py-4 text-sm font-bold text-da-blue-900 hover:bg-da-blue-50 transition-colors">7日</button>
+                    <button type="button" data-span="all" class="share-fund-span-btn da-card px-3 py-4 text-sm font-bold text-da-blue-900 hover:bg-da-blue-50 transition-colors">全期間</button>
+                    <button type="button" data-span="30d" class="share-fund-span-btn da-card px-3 py-4 text-sm font-bold text-da-blue-900 hover:bg-da-blue-50 transition-colors">30日</button>
+                    <button type="button" data-span="7d" class="share-fund-span-btn da-card px-3 py-4 text-sm font-bold text-da-blue-900 hover:bg-da-blue-50 transition-colors">7日</button>
                 </div>
             </div>
 
@@ -716,14 +677,14 @@
                     ティッカー (例: <code class="bg-da-gray-50 px-1 rounded">7203.T</code>, <code class="bg-da-gray-50 px-1 rounded">AAPL</code>) と期間を選択してください。
                 </p>
                 <label for="shareTickerSymbol" class="block text-[10px] font-bold text-da-gray-600 uppercase tracking-widest mb-2">銘柄シンボル</label>
-                <input id="shareTickerSymbol" type="text" placeholder="7203.T" autocomplete="off"
+                <input id="shareTickerSymbol" type="text" placeholder="7203.T" autocomplete="off" maxlength="32" autocapitalize="characters" spellcheck="false"
                     class="w-full bg-white border border-da-gray-200 rounded px-3 py-2 text-da-gray-800 focus:outline-none focus:ring-2 focus:ring-da-blue-900/10 focus:border-da-blue-900 transition-all text-sm font-mono mb-4">
                 <div id="shareTickerSuggest" class="-mt-3 mb-4 flex flex-wrap gap-1.5"></div>
                 <label class="block text-[10px] font-bold text-da-gray-600 uppercase tracking-widest mb-2">チャート期間</label>
                 <div class="grid grid-cols-3 gap-2 mb-4">
-                    <button data-span="all" class="share-ticker-span-btn da-card px-3 py-3 text-sm font-bold text-da-blue-900 hover:bg-da-blue-50 transition-colors">全期間</button>
-                    <button data-span="30d" class="share-ticker-span-btn da-card px-3 py-3 text-sm font-bold text-da-blue-900 hover:bg-da-blue-50 transition-colors">30日</button>
-                    <button data-span="7d" class="share-ticker-span-btn da-card px-3 py-3 text-sm font-bold text-da-blue-900 hover:bg-da-blue-50 transition-colors">7日</button>
+                    <button type="button" data-span="all" class="share-ticker-span-btn da-card px-3 py-3 text-sm font-bold text-da-blue-900 hover:bg-da-blue-50 transition-colors">全期間</button>
+                    <button type="button" data-span="30d" class="share-ticker-span-btn da-card px-3 py-3 text-sm font-bold text-da-blue-900 hover:bg-da-blue-50 transition-colors">30日</button>
+                    <button type="button" data-span="7d" class="share-ticker-span-btn da-card px-3 py-3 text-sm font-bold text-da-blue-900 hover:bg-da-blue-50 transition-colors">7日</button>
                 </div>
                 <button id="shareTickerSubmit" type="button" disabled
                     class="w-full bg-da-blue-1200 hover:bg-da-blue-900 disabled:bg-da-gray-200 disabled:cursor-not-allowed text-white text-sm font-bold px-4 py-3 rounded transition-colors">
@@ -768,6 +729,7 @@
             const container = document.getElementById('toastContainer');
             const toast = document.createElement('div');
             toast.className = `toast ${type}`;
+            toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
             
             // Icon based on type
             const iconMap = {
@@ -776,10 +738,14 @@
                 'info': 'ℹ'
             };
             
-            toast.innerHTML = `
-                <div class="toast-icon">${iconMap[type] || 'ℹ'}</div>
-                <div class="toast-message">${message}</div>
-            `;
+            const icon = document.createElement('div');
+            icon.className = 'toast-icon';
+            icon.setAttribute('aria-hidden', 'true');
+            icon.textContent = iconMap[type] || 'ℹ';
+            const body = document.createElement('div');
+            body.className = 'toast-message';
+            body.textContent = String(message);
+            toast.append(icon, body);
             
             container.appendChild(toast);
             
@@ -791,6 +757,33 @@
                 }, 300); // Match slideOut animation duration
             }, duration);
         }
+
+        async function copyText(text) {
+            if (window.isSecureContext && navigator.clipboard) {
+                await navigator.clipboard.writeText(text);
+                return;
+            }
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            const copied = document.execCommand('copy');
+            textarea.remove();
+            if (!copied) throw new Error('copy failed');
+        }
+        window.copyText = copyText;
+
+        try {
+            const pendingToast = sessionStorage.getItem('korucha-toast');
+            if (pendingToast) {
+                sessionStorage.removeItem('korucha-toast');
+                const parsed = JSON.parse(pendingToast);
+                showToast(parsed.message, parsed.type);
+            }
+        } catch (e) { /* storage can be unavailable in privacy modes */ }
 
         // Footer year — keep evergreen.
         (function () {
@@ -819,11 +812,6 @@
             btn.addEventListener('htmx:afterRequest', () => setBusy(false));
         })();
 
-        // Listen for HTMX refreshAll trigger from POST /refresh
-        document.body.addEventListener('refreshAll', function () {
-            location.reload();
-        });
-
         // Share-card creation: 3-step modal
         //   Step 0: pick mode (fund vs ticker)
         //   Step 1a: fund span picker  →  POST /share
@@ -851,6 +839,7 @@
             const tickerError = document.getElementById('shareTickerError');
             const tickerSuggest = document.getElementById('shareTickerSuggest');
             let currentTickerSpan = '30d';
+            let previouslyFocused = null;
 
             function showStep(step) {
                 [step0, step1Fund, step1Ticker, step2].forEach(s => s.classList.add('hidden'));
@@ -862,12 +851,17 @@
                 });
             }
             function open() {
+                previouslyFocused = document.activeElement;
                 showStep(step0);
                 tickerError.classList.add('hidden');
                 modal.classList.remove('modal-hidden');
+                modal.setAttribute('aria-hidden', 'false');
+                requestAnimationFrame(() => step0.querySelector('button')?.focus());
             }
             function close() {
                 modal.classList.add('modal-hidden');
+                modal.setAttribute('aria-hidden', 'true');
+                previouslyFocused?.focus();
             }
             function showStep2(url) {
                 input.value = url;
@@ -879,6 +873,27 @@
             cancelBtn.addEventListener('click', close);
             closeBtn.addEventListener('click', close);
             modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+            modal.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    close();
+                    return;
+                }
+                if (e.key !== 'Tab') return;
+                const focusable = Array.from(modal.querySelectorAll(
+                    'button:not([disabled]):not(.hidden), a[href]:not(.hidden), input:not([disabled]):not(.hidden), select:not([disabled]):not(.hidden)'
+                )).filter(el => el.offsetParent !== null);
+                if (!focusable.length) return;
+                const first = focusable[0];
+                const last = focusable[focusable.length - 1];
+                if (e.shiftKey && document.activeElement === first) {
+                    e.preventDefault();
+                    last.focus();
+                } else if (!e.shiftKey && document.activeElement === last) {
+                    e.preventDefault();
+                    first.focus();
+                }
+            });
             backBtns.forEach(b => b.addEventListener('click', () => showStep(step0)));
 
             modeBtns.forEach(b => {
@@ -904,11 +919,14 @@
                     b.textContent = '発行中…';
                     try {
                         const res = await fetch('/share?span=' + encodeURIComponent(span), { method: 'POST' });
-                        if (!res.ok) throw new Error('failed');
+                        if (!res.ok) {
+                            const message = await res.text();
+                            throw new Error(message.length < 200 ? message : '共有カードの発行に失敗しました');
+                        }
                         const data = await res.json();
                         showStep2(location.origin + data.url);
                     } catch (e) {
-                        alert('共有カードの発行に失敗しました');
+                        showToast((e && e.message) || '共有カードの発行に失敗しました', 'error');
                     } finally {
                         fundSpanBtns.forEach(x => x.disabled = false);
                         b.textContent = orig;
@@ -918,7 +936,7 @@
 
             // ---- Ticker flow ----
             function renderTickerSuggestions() {
-                tickerSuggest.innerHTML = '';
+                tickerSuggest.replaceChildren();
                 const entries = new Map();
                 document.querySelectorAll('#holdings-sortable tbody tr td:first-child').forEach(td => {
                     const s = td.textContent.trim();
@@ -1006,11 +1024,11 @@
             // ---- Step 2: copy ----
             copyBtn.addEventListener('click', () => {
                 input.select();
-                navigator.clipboard.writeText(input.value).then(() => {
+                copyText(input.value).then(() => {
                     const t = copyBtn.textContent;
                     copyBtn.textContent = '✓ コピー済み';
                     setTimeout(() => { copyBtn.textContent = t; }, 1500);
-                });
+                }).catch(() => showToast('URLをコピーできませんでした', 'error'));
             });
         })();
     </script>
@@ -1052,9 +1070,11 @@
                     }
 
                     // Check if external API was used by parsing response JSON
-                    let updateSucceeded = true;
+                    let updateSucceeded = false;
                     let apiWasUsed = false;
+                    let apiWasAttempted = false;
                     let toastMessage = '';
+                    let toastType = 'success';
                     
                     try {
                         const xhr = evt.detail && evt.detail.xhr;
@@ -1064,6 +1084,7 @@
                             // Determine success/failure
                             updateSucceeded = response.ok !== false;
                             apiWasUsed = response.updated_from_api === true;
+                            apiWasAttempted = response.external_update_attempted === true;
                             
                             // Build toast message
                             if (apiWasUsed) {
@@ -1071,6 +1092,9 @@
                                 if (response.remaining_api_requests !== undefined) {
                                     toastMessage += ` (残り: ${response.remaining_api_requests}/15回)`;
                                 }
+                            } else if (apiWasAttempted) {
+                                toastMessage = '外部APIの一部取得に失敗しました。取得済みデータで更新しました';
+                                toastType = 'info';
                             } else {
                                 toastMessage = 'データをキャッシュから更新しました';
                             }
@@ -1079,14 +1103,26 @@
                             if (response.updated_from_api) {
                                 const apiStatus = document.getElementById('externalApiStatus');
                                 if (apiStatus) {
-                                    apiStatus.innerHTML = '<span style="color: #059669;">✓</span> 外部APIから最新データを取得しました';
+                                    const check = document.createElement('span');
+                                    check.style.color = '#059669';
+                                    check.textContent = '✓';
+                                    apiStatus.replaceChildren(check, ' 外部APIから最新データを取得しました');
                                     apiStatus.style.display = 'block';
                                     apiStatus.style.color = '#059669';
+                                }
+                            } else if (apiWasAttempted) {
+                                const status = document.getElementById('loadingStatus');
+                                if (status) {
+                                    status.textContent = '外部APIの一部取得に失敗しました。取得済みデータで更新しました';
                                 }
                             } else {
                                 const status = document.getElementById('loadingStatus');
                                 if (status) {
-                                    status.innerHTML = '✓ データを更新しました<br/>（キャッシュから）';
+                                    status.replaceChildren(
+                                        '✓ データを更新しました',
+                                        document.createElement('br'),
+                                        '（キャッシュから）'
+                                    );
                                 }
                             }
                         }
@@ -1096,7 +1132,22 @@
                         toastMessage = '更新に失敗しました';
                     }
                     
-                    // Show toast notification
+                    if (updateSucceeded && toastMessage) {
+                        try {
+                            sessionStorage.setItem('korucha-toast', JSON.stringify({
+                                message: toastMessage,
+                                type: toastType
+                            }));
+                            location.reload();
+                            return;
+                        } catch (storageError) {
+                            showToast(toastMessage, toastType);
+                            setTimeout(() => location.reload(), 800);
+                            return;
+                        }
+                    }
+
+                    // Keep failures on screen so their diagnostic isn't lost.
                     if (toastMessage) {
                         const toastType = updateSucceeded ? 'success' : 'error';
                         showToast(toastMessage, toastType);
