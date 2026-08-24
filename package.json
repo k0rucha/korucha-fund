@@ -5,6 +5,6 @@
     "css": "tailwindcss -i ./static/input.css -o ./static/app.css --minify"
   },
   "devDependencies": {
-    "tailwindcss": "3.4.17"
+    "tailwindcss": "4.3.3"
   }
 }
