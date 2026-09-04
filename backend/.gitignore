@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+korucha-fund.db
+korucha-fund.db-journal
+korucha-fund.db-shm
+korucha-fund.db-wal
+dist/
+.pytest_cache/
