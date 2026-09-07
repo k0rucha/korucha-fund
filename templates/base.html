@@ -540,7 +540,7 @@
 </head>
 
 <body class="text-da-gray-800 font-sans">
-    <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded focus:bg-white focus:px-4 focus:py-3 focus:font-bold focus:text-da-blue-900 focus:shadow-lg">
+    <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-sm focus:bg-white focus:px-4 focus:py-3 focus:font-bold focus:text-da-blue-900 focus:shadow-lg">
         メインコンテンツへ移動
     </a>
     <!-- Toast notification container -->
@@ -607,7 +607,7 @@
                     </button>
                     <button id="refreshBtn" type="button" aria-label="データを更新"
                         hx-post="/refresh" hx-indicator="#loadingOverlay" hx-swap="none"
-                        class="refresh-btn text-white px-6 py-3 rounded text-base font-bold flex items-center gap-2 shadow-sm">
+                        class="refresh-btn text-white px-6 py-3 rounded-sm text-base font-bold flex items-center gap-2 shadow-xs">
                         <span class="refresh-spin refresh-indicator" aria-hidden="true">↻</span>
                         <span class="refresh-label">更新</span>
                     </button>
@@ -674,11 +674,11 @@
                 </button>
                 <h3 class="text-lg font-bold text-da-blue-1200 mb-2">銘柄を共有</h3>
                 <p class="text-sm text-da-gray-600 mb-5">
-                    ティッカー (例: <code class="bg-da-gray-50 px-1 rounded">7203.T</code>, <code class="bg-da-gray-50 px-1 rounded">AAPL</code>) と期間を選択してください。
+                    ティッカー (例: <code class="bg-da-gray-50 px-1 rounded-sm">7203.T</code>, <code class="bg-da-gray-50 px-1 rounded-sm">AAPL</code>) と期間を選択してください。
                 </p>
                 <label for="shareTickerSymbol" class="block text-[10px] font-bold text-da-gray-600 uppercase tracking-widest mb-2">銘柄シンボル</label>
                 <input id="shareTickerSymbol" type="text" placeholder="7203.T" autocomplete="off" maxlength="32" autocapitalize="characters" spellcheck="false"
-                    class="w-full bg-white border border-da-gray-200 rounded px-3 py-2 text-da-gray-800 focus:outline-none focus:ring-2 focus:ring-da-blue-900/10 focus:border-da-blue-900 transition-all text-sm font-mono mb-4">
+                    class="w-full bg-white border border-da-gray-200 rounded-sm px-3 py-2 text-da-gray-800 focus:outline-hidden focus:ring-2 focus:ring-da-blue-900/10 focus:border-da-blue-900 transition-all text-sm font-mono mb-4">
                 <div id="shareTickerSuggest" class="-mt-3 mb-4 flex flex-wrap gap-1.5"></div>
                 <label class="block text-[10px] font-bold text-da-gray-600 uppercase tracking-widest mb-2">チャート期間</label>
                 <div class="grid grid-cols-3 gap-2 mb-4">
@@ -687,7 +687,7 @@
                     <button type="button" data-span="7d" class="share-ticker-span-btn da-card px-3 py-3 text-sm font-bold text-da-blue-900 hover:bg-da-blue-50 transition-colors">7日</button>
                 </div>
                 <button id="shareTickerSubmit" type="button" disabled
-                    class="w-full bg-da-blue-1200 hover:bg-da-blue-900 disabled:bg-da-gray-200 disabled:cursor-not-allowed text-white text-sm font-bold px-4 py-3 rounded transition-colors">
+                    class="w-full bg-da-blue-1200 hover:bg-da-blue-900 disabled:bg-da-gray-200 disabled:cursor-not-allowed text-white text-sm font-bold px-4 py-3 rounded-sm transition-colors">
                     銘柄カードを発行
                 </button>
                 <p id="shareTickerError" class="text-xs text-red-600 mt-3 hidden"></p>
@@ -701,9 +701,9 @@
                 </p>
                 <div class="flex items-stretch gap-2 mb-5">
                     <input id="shareUrlInput" type="text" readonly
-                        class="flex-1 bg-da-gray-50 border border-da-gray-200 rounded px-3 py-2 text-sm text-da-gray-800 font-mono">
+                        class="flex-1 bg-da-gray-50 border border-da-gray-200 rounded-sm px-3 py-2 text-sm text-da-gray-800 font-mono">
                     <button id="copyShareBtn" type="button"
-                        class="bg-da-blue-1200 hover:bg-da-blue-900 text-white text-sm font-bold px-4 rounded transition-colors">
+                        class="bg-da-blue-1200 hover:bg-da-blue-900 text-white text-sm font-bold px-4 rounded-sm transition-colors">
                         コピー
                     </button>
                 </div>
@@ -952,7 +952,7 @@
                 entries.forEach((name, sym) => {
                     const chip = document.createElement('button');
                     chip.type = 'button';
-                    chip.className = 'text-xs font-mono font-bold text-da-blue-900 bg-da-blue-50 hover:bg-da-blue-50/70 px-2 py-1 rounded transition-colors';
+                    chip.className = 'text-xs font-mono font-bold text-da-blue-900 bg-da-blue-50 hover:bg-da-blue-50/70 px-2 py-1 rounded-sm transition-colors';
                     chip.textContent = sym;
                     if (name) chip.dataset.tickerName = name;
                     chip.addEventListener('click', () => {

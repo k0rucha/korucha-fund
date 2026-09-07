@@ -42,12 +42,12 @@
             <div class="lg:col-span-1">
                 <label for="tx-symbol" class="block text-[10px] font-bold text-da-gray-600 uppercase tracking-widest mb-3">銘柄シンボル</label>
                 <input id="tx-symbol" type="text" name="symbol" placeholder="例: 7203.T, AAPL" required maxlength="32" autocapitalize="characters" spellcheck="false"
-                    class="w-full bg-white border border-da-gray-200 rounded px-4 py-3 text-da-gray-800 focus:outline-none focus:ring-2 focus:ring-da-blue-900/10 focus:border-da-blue-900 transition-all placeholder:text-da-gray-400 text-sm">
+                    class="w-full bg-white border border-da-gray-200 rounded-sm px-4 py-3 text-da-gray-800 focus:outline-hidden focus:ring-2 focus:ring-da-blue-900/10 focus:border-da-blue-900 transition-all placeholder:text-da-gray-400 text-sm">
             </div>
             <div class="lg:col-span-1">
                 <label for="tx-type" class="block text-[10px] font-bold text-da-gray-600 uppercase tracking-widest mb-3">取引タイプ</label>
                 <select id="tx-type" name="txn_type" required
-                    class="w-full bg-white border border-da-gray-200 rounded px-4 py-3 text-da-gray-800 focus:outline-none focus:ring-2 focus:ring-da-blue-900/10 transition-all appearance-none cursor-pointer text-sm">
+                    class="w-full bg-white border border-da-gray-200 rounded-sm px-4 py-3 text-da-gray-800 focus:outline-hidden focus:ring-2 focus:ring-da-blue-900/10 transition-all appearance-none cursor-pointer text-sm">
                     <option value="BUY">BUY</option>
                     <option value="SELL">SELL</option>
                 </select>
@@ -55,15 +55,15 @@
             <div class="lg:col-span-1">
                 <label for="tx-quantity" class="block text-[10px] font-bold text-da-gray-600 uppercase tracking-widest mb-3">数量</label>
                 <input id="tx-quantity" type="number" step="any" min="0.000000000001" name="quantity" required
-                    class="w-full bg-white border border-da-gray-200 rounded px-4 py-3 text-da-gray-800 focus:outline-none focus:ring-2 focus:ring-da-blue-900/10 transition-all text-sm">
+                    class="w-full bg-white border border-da-gray-200 rounded-sm px-4 py-3 text-da-gray-800 focus:outline-hidden focus:ring-2 focus:ring-da-blue-900/10 transition-all text-sm">
             </div>
             <div class="lg:col-span-1">
                 <label for="tx-price" class="block text-[10px] font-bold text-da-gray-600 uppercase tracking-widest mb-3">単価</label>
                 <div class="flex gap-2">
                     <input id="tx-price" type="number" step="any" min="0.000000000001" name="price" required
-                        class="flex-1 bg-white border border-da-gray-200 rounded px-4 py-3 text-da-gray-800 focus:outline-none focus:ring-2 focus:ring-da-blue-900/10 transition-all text-sm">
+                        class="flex-1 bg-white border border-da-gray-200 rounded-sm px-4 py-3 text-da-gray-800 focus:outline-hidden focus:ring-2 focus:ring-da-blue-900/10 transition-all text-sm">
                     <select id="tx-currency" name="currency" required aria-label="通貨"
-                        class="w-24 bg-white border border-da-gray-200 rounded px-2 py-3 text-da-gray-800 focus:outline-none focus:ring-2 focus:ring-da-blue-900/10 transition-all appearance-none cursor-pointer text-center text-sm">
+                        class="w-24 bg-white border border-da-gray-200 rounded-sm px-2 py-3 text-da-gray-800 focus:outline-hidden focus:ring-2 focus:ring-da-blue-900/10 transition-all appearance-none cursor-pointer text-center text-sm">
                         <option value="JPY">JPY</option>
                         <option value="USD">USD</option>
                     </select>
@@ -72,25 +72,25 @@
             <div class="lg:col-span-1">
                 <label for="tx-fee" class="block text-[10px] font-bold text-da-gray-600 uppercase tracking-widest mb-3">手数料</label>
                 <input id="tx-fee" type="number" step="any" min="0" name="fee" value="0" required
-                    class="w-full bg-white border border-da-gray-200 rounded px-4 py-3 text-da-gray-800 focus:outline-none focus:ring-2 focus:ring-da-blue-900/10 transition-all text-sm">
+                    class="w-full bg-white border border-da-gray-200 rounded-sm px-4 py-3 text-da-gray-800 focus:outline-hidden focus:ring-2 focus:ring-da-blue-900/10 transition-all text-sm">
             </div>
             <div class="lg:col-span-1">
                 <label for="tx-date" class="block text-[10px] font-bold text-da-gray-600 uppercase tracking-widest mb-3">約定日</label>
                 <input id="tx-date" type="date" name="txn_date" required
-                    class="w-full bg-white border border-da-gray-200 rounded px-4 py-3 text-da-gray-800 focus:outline-none focus:ring-2 focus:ring-da-blue-900/10 transition-all text-sm">
+                    class="w-full bg-white border border-da-gray-200 rounded-sm px-4 py-3 text-da-gray-800 focus:outline-hidden focus:ring-2 focus:ring-da-blue-900/10 transition-all text-sm">
             </div>
             <div class="md:col-span-2">
                 <label for="tx-fx" class="block text-[10px] font-bold text-da-gray-600 uppercase tracking-widest mb-3">USD/JPY換算レート (USD取引のみ)</label>
                 <input id="tx-fx" type="number" step="any" min="0.000000000001" name="fx_rate_to_jpy" placeholder="150.0"
-                    class="w-full bg-white border border-da-gray-200 rounded px-4 py-3 text-da-gray-800 focus:outline-none focus:ring-2 focus:ring-da-blue-900/10 transition-all placeholder:text-da-gray-400 text-sm">
+                    class="w-full bg-white border border-da-gray-200 rounded-sm px-4 py-3 text-da-gray-800 focus:outline-hidden focus:ring-2 focus:ring-da-blue-900/10 transition-all placeholder:text-da-gray-400 text-sm">
             </div>
             <div class="md:col-span-4">
                 <label for="tx-notes" class="block text-[10px] font-bold text-da-gray-600 uppercase tracking-widest mb-3">メモ</label>
                 <input id="tx-notes" type="text" name="notes" maxlength="1000" placeholder="任意"
-                    class="w-full bg-white border border-da-gray-200 rounded px-4 py-3 text-da-gray-800 focus:outline-none focus:ring-2 focus:ring-da-blue-900/10 transition-all placeholder:text-da-gray-400 text-sm">
+                    class="w-full bg-white border border-da-gray-200 rounded-sm px-4 py-3 text-da-gray-800 focus:outline-hidden focus:ring-2 focus:ring-da-blue-900/10 transition-all placeholder:text-da-gray-400 text-sm">
             </div>
             <div class="md:col-span-4 pt-4">
-                <button type="submit" class="w-full sm:w-auto px-12 py-4 bg-da-blue-1200 hover:bg-da-blue-900 text-white font-black rounded transition-all shadow-md active:scale-95 text-sm uppercase tracking-widest">
+                <button type="submit" class="w-full sm:w-auto px-12 py-4 bg-da-blue-1200 hover:bg-da-blue-900 text-white font-black rounded-sm transition-all shadow-md active:scale-95 text-sm uppercase tracking-widest">
                     取引を記録する
                 </button>
             </div>
@@ -101,7 +101,7 @@
     <div class="da-card overflow-hidden">
         <div class="px-8 py-6 border-b border-da-gray-200 flex justify-between items-center bg-da-gray-50/50">
             <h3 class="text-xs font-bold text-da-gray-600 uppercase tracking-widest">最近の取引履歴</h3>
-            <span class="text-[10px] text-da-gray-600 font-bold bg-white border border-da-gray-200 px-3 py-1 rounded-full shadow-sm">{{ transactions.len() }} 件の記録</span>
+            <span class="text-[10px] text-da-gray-600 font-bold bg-white border border-da-gray-200 px-3 py-1 rounded-full shadow-xs">{{ transactions.len() }} 件の記録</span>
         </div>
         <div class="overflow-x-auto">
             <table class="min-w-full text-sm">
@@ -123,7 +123,7 @@
                         <td class="px-8 py-5 whitespace-nowrap text-da-gray-600 font-medium tabular-nums">{{ tx.txn_date }}</td>
                         <td class="px-8 py-5 whitespace-nowrap text-da-blue-1200 font-black">{% if let Some(name) = symbol_names.get(tx.symbol.as_str()) %}<span class="ticker-symbol-cell" data-ticker-name="{{ name }}">{{ tx.symbol }}</span>{% else %}{{ tx.symbol }}{% endif %}</td>
                         <td class="px-8 py-5 whitespace-nowrap text-center">
-                            <span class="px-3 py-1 inline-flex text-[10px] font-black rounded border {% if tx.txn_type == "BUY" %}bg-emerald-50 text-emerald-700 border-emerald-200{% else %}bg-rose-50 text-rose-700 border-rose-200{% endif %}">
+                            <span class="px-3 py-1 inline-flex text-[10px] font-black rounded-sm border {% if tx.txn_type == "BUY" %}bg-emerald-50 text-emerald-700 border-emerald-200{% else %}bg-rose-50 text-rose-700 border-rose-200{% endif %}">
                                 {{ tx.txn_type }}
                             </span>
                         </td>
@@ -139,7 +139,7 @@
                                 hx-swap="outerHTML"
                                 hx-confirm="この取引記録を削除してもよろしいですか？"
                                 aria-label="取引 #{{ tx.id }} を削除"
-                                class="text-da-gray-400 hover:text-red-600 transition-colors p-2 rounded hover:bg-red-50">
+                                class="text-da-gray-400 hover:text-red-600 transition-colors p-2 rounded-sm hover:bg-red-50">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                                 </svg>
